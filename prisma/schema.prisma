@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppointmentStatus {
+  BOOKED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  PUBLIC_PAGE
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CARD
+  OTHER
+}
+
+enum ReminderChannel {
+  SMS
+  EMAIL
+}
+
+enum ReminderType {
+  BOOKING_CONFIRMATION
+  APPOINTMENT_REMINDER
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Barber {
+  id               String             @id @default(cuid())
+  clerkUserId      String             @unique
+  slug             String             @unique
+  name             String
+  businessName     String?
+  email            String             @unique
+  phone            String?
+  location         String?
+  timezone         String             @default("America/New_York")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  services         Service[]
+  clients          Client[]
+  appointments     Appointment[]
+  availability     AvailabilityRule[]
+  timeOffBlocks    TimeOffBlock[]
+  payments         Payment[]
+}
+
+model Service {
+  id              String        @id @default(cuid())
+  barberId        String
+  name            String
+  description     String?
+  durationMinutes Int
+  priceCents      Int
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  barber          Barber        @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+
+  @@index([barberId, isActive])
+}
+
+model Client {
+  id           String        @id @default(cuid())
+  barberId     String
+  name         String
+  email        String?
+  phone        String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  barber       Barber        @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([barberId])
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  barberId      String
+  clientId      String
+  serviceId     String
+  startTime     DateTime
+  endTime       DateTime
+  status        AppointmentStatus @default(BOOKED)
+  bookingSource BookingSource     @default(PUBLIC_PAGE)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  barber        Barber            @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  client        Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service       Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  payment       Payment?
+  reminders     Reminder[]
+
+  @@index([barberId, startTime, endTime])
+  @@index([clientId])
+}
+
+model AvailabilityRule {
+  id             String  @id @default(cuid())
+  barberId       String
+  dayOfWeek      Int
+  startTimeLocal String
+  endTimeLocal   String
+  isActive       Boolean @default(true)
+  barber         Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, dayOfWeek, isActive])
+}
+
+model TimeOffBlock {
+  id        String   @id @default(cuid())
+  barberId  String
+  startTime DateTime
+  endTime   DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  barber    Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, startTime, endTime])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  barberId              String
+  appointmentId         String        @unique
+  amountCents           Int
+  tipCents              Int           @default(0)
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  method                PaymentMethod @default(STRIPE)
+  stripePaymentIntentId String?
+  createdAt             DateTime      @default(now())
+  barber                Barber        @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  appointment           Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, createdAt])
+}
+
+model Reminder {
+  id           String          @id @default(cuid())
+  appointmentId String
+  channel      ReminderChannel
+  type         ReminderType
+  scheduledFor DateTime
+  sentAt       DateTime?
+  status       ReminderStatus  @default(PENDING)
+  appointment  Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId, scheduledFor])
+}

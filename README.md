@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mane Manager
+
+Barber-first business management platform MVP.
+
+## Tech Stack
+- Next.js (App Router) + React + TailwindCSS
+- Node.js + TypeScript
+- PostgreSQL + Prisma
+- Clerk (auth)
+- Stripe (payments)
+- Twilio (SMS)
+- Resend (email)
+- Trigger.dev (jobs)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
+cp .env.example .env
+npm run prisma:generate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `app/`: public booking route, dashboard routes, and API handlers
+- `components/`: UI, booking, dashboard, and form components
+- `lib/`: business logic, validators, db/auth integrations
+- `prisma/schema.prisma`: source of truth for data models
+- `trigger/jobs/`: background job definitions
+- `tests/unit`: Vitest tests
+- `tests/e2e`: Playwright tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Env Docs
 
-## Learn More
+- [Environment variables](./docs/environment.md)
 
-To learn more about Next.js, take a look at the following resources:
+## Current MVP Coverage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Barber auth scaffolding with Clerk
+- Service CRUD for barbers
+- Public booking page at `/{slug}`
+- Slot generation and server-side double-booking prevention
+- Appointment creation + reminder records + confirmation hooks
+- Basic dashboard pages for calendar/clients/payments/analytics/settings

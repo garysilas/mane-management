@@ -86,10 +86,11 @@ export function PublicBookingForm({ slug }: Props) {
     setBooking(true);
     setMessage("");
 
-    const response = await fetch(`/api/public/${slug}/book`, {
+    const response = await fetch("/api/appointments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        barberSlug: slug,
         serviceId,
         startTime: slotValue,
         name,

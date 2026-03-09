@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { isTimeSlotAvailable } from "@/lib/scheduling/engine";
 import { ConflictError, NotFoundError } from "@/lib/utils/errors";
 import { addMinutes } from "@/lib/utils/time";
 
@@ -24,6 +25,8 @@ type CreateAppointmentInput = {
     notes?: string | null;
   };
 };
+
+const MAX_TRANSACTION_RETRIES = 2;
 
 async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateAppointmentInput) {
   const { barberId, client } = input;
@@ -65,82 +68,122 @@ async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateApp
 }
 
 export async function createAppointment(input: CreateAppointmentInput) {
-  return prisma.$transaction(
-    async (tx) => {
-      const service = await tx.service.findFirst({
-        where: {
-          id: input.serviceId,
-          barberId: input.barberId,
-          isActive: true,
-        },
-      });
+  for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const barber = await tx.barber.findUnique({
+            where: { id: input.barberId },
+            select: { id: true },
+          });
 
-      if (!service) {
-        throw new NotFoundError("Service not found.");
+          if (!barber) {
+            throw new NotFoundError("Barber not found.");
+          }
+
+          const service = await tx.service.findFirst({
+            where: {
+              id: input.serviceId,
+              barberId: input.barberId,
+              isActive: true,
+            },
+          });
+
+          if (!service) {
+            throw new NotFoundError("Service not found.");
+          }
+
+          const startTime = input.startTime;
+          const endTime = addMinutes(startTime, service.durationMinutes);
+
+          const existingAppointments = await tx.appointment.findMany({
+            where: {
+              barberId: input.barberId,
+              status: { not: AppointmentStatus.CANCELLED },
+              startTime: { lt: endTime },
+              endTime: { gt: startTime },
+            },
+            select: {
+              startTime: true,
+              endTime: true,
+              status: true,
+            },
+          });
+
+          const slotIsAvailable = isTimeSlotAvailable({
+            proposedStartTime: startTime,
+            proposedEndTime: endTime,
+            appointments: existingAppointments,
+          });
+
+          if (!slotIsAvailable) {
+            throw new ConflictError("This time slot is no longer available.");
+          }
+
+          const client = await findOrCreateClient(tx, input);
+
+          const appointment = await tx.appointment.create({
+            data: {
+              barberId: input.barberId,
+              clientId: client.id,
+              serviceId: service.id,
+              startTime,
+              endTime,
+              status: AppointmentStatus.BOOKED,
+              bookingSource: input.bookingSource,
+              notes: input.notes,
+            },
+          });
+
+          const reminderTime = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
+          const reminders = [] as Prisma.ReminderCreateManyInput[];
+
+          if (client.phone) {
+            reminders.push({
+              appointmentId: appointment.id,
+              channel: ReminderChannel.SMS,
+              type: ReminderType.APPOINTMENT_REMINDER,
+              scheduledFor: reminderTime,
+              status: ReminderStatus.PENDING,
+            });
+          }
+
+          if (client.email) {
+            reminders.push({
+              appointmentId: appointment.id,
+              channel: ReminderChannel.EMAIL,
+              type: ReminderType.APPOINTMENT_REMINDER,
+              scheduledFor: reminderTime,
+              status: ReminderStatus.PENDING,
+            });
+          }
+
+          if (reminders.length > 0) {
+            await tx.reminder.createMany({ data: reminders });
+          }
+
+          return appointment;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034" &&
+        attempt < MAX_TRANSACTION_RETRIES - 1
+      ) {
+        continue;
       }
 
-      const startTime = input.startTime;
-      const endTime = addMinutes(startTime, service.durationMinutes);
-
-      const conflictingAppointment = await tx.appointment.findFirst({
-        where: {
-          barberId: input.barberId,
-          status: AppointmentStatus.BOOKED,
-          startTime: { lt: endTime },
-          endTime: { gt: startTime },
-        },
-      });
-
-      if (conflictingAppointment) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
         throw new ConflictError("This time slot is no longer available.");
       }
 
-      const client = await findOrCreateClient(tx, input);
+      throw error;
+    }
+  }
 
-      const appointment = await tx.appointment.create({
-        data: {
-          barberId: input.barberId,
-          clientId: client.id,
-          serviceId: service.id,
-          startTime,
-          endTime,
-          status: AppointmentStatus.BOOKED,
-          bookingSource: input.bookingSource,
-          notes: input.notes,
-        },
-      });
-
-      const reminderTime = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
-      const reminders = [] as Prisma.ReminderCreateManyInput[];
-
-      if (client.phone) {
-        reminders.push({
-          appointmentId: appointment.id,
-          channel: ReminderChannel.SMS,
-          type: ReminderType.APPOINTMENT_REMINDER,
-          scheduledFor: reminderTime,
-          status: ReminderStatus.PENDING,
-        });
-      }
-
-      if (client.email) {
-        reminders.push({
-          appointmentId: appointment.id,
-          channel: ReminderChannel.EMAIL,
-          type: ReminderType.APPOINTMENT_REMINDER,
-          scheduledFor: reminderTime,
-          status: ReminderStatus.PENDING,
-        });
-      }
-
-      if (reminders.length > 0) {
-        await tx.reminder.createMany({ data: reminders });
-      }
-
-      return appointment;
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-    },
-  );
+  throw new ConflictError("This time slot is no longer available.");
 }

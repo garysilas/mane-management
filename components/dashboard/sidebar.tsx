@@ -21,7 +21,7 @@ export function DashboardSidebar() {
       <p className="px-3 pb-4 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500">Mane Manager</p>
       <nav className="space-y-1">
         {navItems.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
             <Link

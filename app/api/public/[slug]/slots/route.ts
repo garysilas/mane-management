@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
-import { generateAvailableSlots } from "@/lib/scheduling/slots";
+import { generateTimeSlots } from "@/lib/scheduling";
 import { slotQuerySchema } from "@/lib/validators/booking";
 
 type RouteProps = {
@@ -77,10 +77,10 @@ export async function GET(request: Request, { params }: RouteProps) {
     },
   });
 
-  const slots = generateAvailableSlots({
+  const slots = generateTimeSlots({
     date: dayStart,
-    slotDurationMinutes: service.durationMinutes,
-    rules: barber.availability,
+    serviceDurationMinutes: service.durationMinutes,
+    availabilityRules: barber.availability,
     appointments,
     timeOffBlocks: barber.timeOffBlocks,
     slotIntervalMinutes: 15,

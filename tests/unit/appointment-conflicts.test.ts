@@ -1,9 +1,9 @@
 import { AppointmentStatus } from "@prisma/client";
 
-import { hasAppointmentConflict } from "@/lib/scheduling/conflicts";
+import { isTimeSlotAvailable } from "@/lib/scheduling";
 
 describe("appointment conflict detection", () => {
-  it("returns true when a booked appointment overlaps", () => {
+  it("returns false when a booked appointment overlaps", () => {
     const existing = [
       {
         startTime: new Date("2026-03-11T15:00:00.000Z"),
@@ -12,16 +12,16 @@ describe("appointment conflict detection", () => {
       },
     ];
 
-    const hasConflict = hasAppointmentConflict(
-      existing,
-      new Date("2026-03-11T15:20:00.000Z"),
-      new Date("2026-03-11T15:50:00.000Z"),
-    );
+    const isAvailable = isTimeSlotAvailable({
+      appointments: existing,
+      proposedStartTime: new Date("2026-03-11T15:20:00.000Z"),
+      proposedEndTime: new Date("2026-03-11T15:50:00.000Z"),
+    });
 
-    expect(hasConflict).toBe(true);
+    expect(isAvailable).toBe(false);
   });
 
-  it("ignores cancelled appointments", () => {
+  it("ignores cancelled appointments when checking availability", () => {
     const existing = [
       {
         startTime: new Date("2026-03-11T15:00:00.000Z"),
@@ -30,12 +30,12 @@ describe("appointment conflict detection", () => {
       },
     ];
 
-    const hasConflict = hasAppointmentConflict(
-      existing,
-      new Date("2026-03-11T15:20:00.000Z"),
-      new Date("2026-03-11T15:50:00.000Z"),
-    );
+    const isAvailable = isTimeSlotAvailable({
+      appointments: existing,
+      proposedStartTime: new Date("2026-03-11T15:20:00.000Z"),
+      proposedEndTime: new Date("2026-03-11T15:50:00.000Z"),
+    });
 
-    expect(hasConflict).toBe(false);
+    expect(isAvailable).toBe(true);
   });
 });

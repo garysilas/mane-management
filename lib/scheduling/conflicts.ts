@@ -1,21 +1,12 @@
-import { AppointmentStatus } from "@prisma/client";
+import { isTimeSlotAvailable, overlaps, type AppointmentWindow } from "@/lib/scheduling/engine";
 
-export type AppointmentWindow = {
-  startTime: Date;
-  endTime: Date;
-  status?: AppointmentStatus;
-};
-
-export function overlaps(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
-  return startA < endB && endA > startB;
-}
+export type { AppointmentWindow };
+export { overlaps };
 
 export function hasAppointmentConflict(existingAppointments: AppointmentWindow[], proposedStart: Date, proposedEnd: Date): boolean {
-  return existingAppointments.some((appointment) => {
-    if (appointment.status && appointment.status !== AppointmentStatus.BOOKED) {
-      return false;
-    }
-
-    return overlaps(appointment.startTime, appointment.endTime, proposedStart, proposedEnd);
+  return !isTimeSlotAvailable({
+    proposedStartTime: proposedStart,
+    proposedEndTime: proposedEnd,
+    appointments: existingAppointments,
   });
 }

@@ -38,7 +38,7 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
     });
   });
 
-  await page.route("**/api/public/jayfades/book", async (route) => {
+  await page.route("**/api/appointments", async (route) => {
     await route.fulfill({
       status: 201,
       contentType: "application/json",

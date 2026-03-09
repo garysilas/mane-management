@@ -14,4 +14,15 @@ export const publicBookingSchema = z.object({
   notes: z.string().trim().max(500).optional().nullable(),
 });
 
+export const appointmentCreateSchema = publicBookingSchema
+  .extend({
+    barberId: z.string().cuid().optional(),
+    barberSlug: z.string().trim().min(2).max(120).optional(),
+  })
+  .refine((payload) => Boolean(payload.barberId || payload.barberSlug), {
+    message: "Either barberId or barberSlug is required.",
+    path: ["barberId"],
+  });
+
 export type PublicBookingInput = z.infer<typeof publicBookingSchema>;
+export type AppointmentCreateInput = z.infer<typeof appointmentCreateSchema>;

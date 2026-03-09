@@ -1,15 +1,47 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { PublicService, Slot } from "@/types";
+import type { PublicBarberProfile, PublicBookingBootstrap, PublicService, Slot } from "@/types";
+import { BarberProfileCard } from "@/components/booking/barber-profile-card";
+import { BookingStepCard } from "@/components/booking/booking-step-card";
 
 type Props = {
   slug: string;
 };
 
+function formatCurrency(priceCents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(priceCents / 100);
+}
+
+function formatTime(value: string): string {
+  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getLocalDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export function PublicBookingForm({ slug }: Props) {
+  const [barber, setBarber] = useState<PublicBarberProfile | null>(null);
   const [services, setServices] = useState<PublicService[]>([]);
+  const [loadingBootstrap, setLoadingBootstrap] = useState<boolean>(true);
+  const [bootstrapError, setBootstrapError] = useState<string>("");
+
   const [serviceId, setServiceId] = useState<string>("");
   const [date, setDate] = useState<string>("");
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -18,210 +50,339 @@ export function PublicBookingForm({ slug }: Props) {
   const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [phone, setPhone] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
-
-  const [message, setMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [successMessage, setSuccessMessage] = useState<string>("");
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [booking, setBooking] = useState<boolean>(false);
+  const latestSlotsRequestRef = useRef(0);
+
+  const minDate = useMemo(() => getLocalDateInputValue(new Date()), []);
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === serviceId),
     [services, serviceId],
   );
 
-  useEffect(() => {
-    async function loadServices() {
-      const response = await fetch(`/api/public/${slug}/services`, { cache: "no-store" });
-      if (!response.ok) {
-        setMessage("Unable to load services for this barber.");
-        return;
-      }
+  const selectedSlot = useMemo(() => slots.find((slot) => slot.startTime === slotValue) ?? null, [slots, slotValue]);
 
-      const data = (await response.json()) as PublicService[];
-      setServices(data);
-      if (data.length > 0) {
-        setServiceId(data[0].id);
+  useEffect(() => {
+    async function loadBookingBootstrap() {
+      setLoadingBootstrap(true);
+      setBootstrapError("");
+      setBarber(null);
+      setServices([]);
+      setServiceId("");
+      setDate("");
+      setSlots([]);
+      setSlotValue("");
+      latestSlotsRequestRef.current += 1;
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      try {
+        const response = await fetch(`/api/public/${slug}`, { cache: "no-store" });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { error?: string };
+          setBootstrapError(data.error ?? "Unable to load booking page.");
+          setLoadingBootstrap(false);
+          return;
+        }
+
+        const data = (await response.json()) as PublicBookingBootstrap;
+        setBarber(data.barber);
+        setServices(data.services);
+        setServiceId(data.services[0]?.id ?? "");
+        setLoadingBootstrap(false);
+      } catch {
+        setBootstrapError("Unable to load booking page.");
+        setLoadingBootstrap(false);
       }
     }
 
-    void loadServices();
+    void loadBookingBootstrap();
   }, [slug]);
 
-  async function fetchSlots() {
-    if (!serviceId || !date) {
-      return;
-    }
+  const fetchSlots = useCallback(
+    async (selectedServiceId: string, selectedDate: string) => {
+      const requestId = latestSlotsRequestRef.current + 1;
+      latestSlotsRequestRef.current = requestId;
+      setLoadingSlots(true);
+      setErrorMessage("");
 
-    setLoadingSlots(true);
-    setMessage("");
+      try {
+        const params = new URLSearchParams({ serviceId: selectedServiceId, date: selectedDate });
+        const response = await fetch(`/api/public/${slug}/slots?${params.toString()}`, { cache: "no-store" });
+        if (requestId !== latestSlotsRequestRef.current) {
+          return;
+        }
+
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { error?: string };
+          setSlots([]);
+          setSlotValue("");
+          setErrorMessage(data.error ?? "Unable to load slots.");
+          setLoadingSlots(false);
+          return;
+        }
+
+        const data = (await response.json()) as Slot[];
+        if (requestId !== latestSlotsRequestRef.current) {
+          return;
+        }
+        setSlots(data);
+        setSlotValue((current) =>
+          data.some((slot) => slot.startTime === current) ? current : (data[0]?.startTime ?? ""),
+        );
+        setLoadingSlots(false);
+      } catch {
+        if (requestId !== latestSlotsRequestRef.current) {
+          return;
+        }
+        setSlots([]);
+        setSlotValue("");
+        setErrorMessage("Unable to load slots.");
+        setLoadingSlots(false);
+      }
+    },
+    [slug],
+  );
+
+  function onServiceChange(nextServiceId: string) {
+    latestSlotsRequestRef.current += 1;
+    setServiceId(nextServiceId);
     setSlots([]);
     setSlotValue("");
 
-    const params = new URLSearchParams({ serviceId, date });
-    const response = await fetch(`/api/public/${slug}/slots?${params.toString()}`, { cache: "no-store" });
-
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      setMessage(data.error ?? "Unable to load slots.");
+    if (date) {
+      void fetchSlots(nextServiceId, date);
+    } else {
       setLoadingSlots(false);
-      return;
     }
-
-    const data = (await response.json()) as Slot[];
-    setSlots(data);
-    if (data.length > 0) {
-      setSlotValue(data[0].startTime);
-    }
-    setLoadingSlots(false);
   }
 
-  async function onSubmit(event: FormEvent) {
+  function onDateChange(nextDate: string) {
+    latestSlotsRequestRef.current += 1;
+    setDate(nextDate);
+    setSlots([]);
+    setSlotValue("");
+
+    if (serviceId && nextDate) {
+      void fetchSlots(serviceId, nextDate);
+    } else {
+      setLoadingSlots(false);
+    }
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!serviceId || !slotValue) {
-      setMessage("Please choose service and slot.");
+      setErrorMessage("Please choose a service and time.");
       return;
     }
 
     setBooking(true);
-    setMessage("");
+    setErrorMessage("");
+    setSuccessMessage("");
 
-    const response = await fetch(`/api/public/${slug}/book`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        serviceId,
-        startTime: slotValue,
-        name,
-        email: email || null,
-        phone: phone || null,
-        notes: notes || null,
-      }),
-    });
+    try {
+      const response = await fetch(`/api/public/${slug}/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId,
+          startTime: slotValue,
+          name,
+          email,
+          phone,
+        }),
+      });
 
-    const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string };
 
-    if (!response.ok) {
-      setMessage(data.error ?? "Booking failed.");
+      if (!response.ok) {
+        setErrorMessage(data.error ?? "Booking failed.");
+        setBooking(false);
+        return;
+      }
+
+      setSuccessMessage("Booking confirmed. Confirmation sent.");
+      setSlotValue("");
+      setName("");
+      setEmail("");
+      setPhone("");
+
+      await fetchSlots(serviceId, date);
       setBooking(false);
-      return;
+    } catch {
+      setErrorMessage("Booking failed.");
+      setBooking(false);
     }
+  }
 
-    setMessage("Booking confirmed. Confirmation sent.");
-    setSlotValue("");
-    setSlots([]);
-    setBooking(false);
+  if (loadingBootstrap) {
+    return (
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <p className="text-sm text-zinc-700">Loading booking page...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (bootstrapError || !barber) {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+        {bootstrapError || "Unable to load booking page."}
+      </section>
+    );
   }
 
   return (
-    <form className="space-y-4" onSubmit={onSubmit}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">1. Service</span>
-          <select
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-            value={serviceId}
-            onChange={(event) => setServiceId(event.target.value)}
-          >
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name} ({service.durationMinutes} min, ${(service.priceCents / 100).toFixed(2)})
-              </option>
-            ))}
-          </select>
-        </label>
+    <div className="space-y-4">
+      <BarberProfileCard barber={barber} />
 
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">2. Date</span>
-          <input
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-          />
-        </label>
-      </div>
-
-      <button
-        className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium"
-        disabled={!serviceId || !date || loadingSlots}
-        type="button"
-        onClick={() => void fetchSlots()}
-      >
-        {loadingSlots ? "Checking availability..." : "3. Find available times"}
-      </button>
-
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">4. Available times</span>
-        <select
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-          value={slotValue}
-          onChange={(event) => setSlotValue(event.target.value)}
+      {services.length === 0 ? (
+        <BookingStepCard
+          step={1}
+          title="Select service"
+          description="This barber does not have active services available right now."
         >
-          <option value="">Select a time</option>
-          {slots.map((slot) => (
-            <option key={slot.startTime} value={slot.startTime}>
-              {new Date(slot.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-            </option>
-          ))}
-        </select>
-      </label>
+          <p className="text-sm text-zinc-700">Please check back later.</p>
+        </BookingStepCard>
+      ) : (
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <BookingStepCard step={1} title="Select service">
+            <fieldset className="space-y-2" aria-label="1. Select service">
+              {services.map((service) => {
+                const isSelected = service.id === serviceId;
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">5. Name</span>
-          <input
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-            required
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
+                return (
+                  <label
+                    key={service.id}
+                    className={`block cursor-pointer rounded-xl border px-3 py-3 text-sm transition ${
+                      isSelected
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-800 hover:border-zinc-400"
+                    }`}
+                  >
+                    <input
+                      checked={isSelected}
+                      className="sr-only"
+                      name="serviceId"
+                      type="radio"
+                      value={service.id}
+                      onChange={(event) => onServiceChange(event.target.value)}
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{service.name}</p>
+                      <p className={isSelected ? "text-zinc-100" : "text-zinc-600"}>{formatCurrency(service.priceCents)}</p>
+                    </div>
+                    <p className={`mt-1 ${isSelected ? "text-zinc-100" : "text-zinc-600"}`}>{service.durationMinutes} min</p>
+                    {service.description ? (
+                      <p className={`mt-1 text-xs ${isSelected ? "text-zinc-100" : "text-zinc-500"}`}>{service.description}</p>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </fieldset>
+          </BookingStepCard>
 
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Email</span>
-          <input
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
-      </div>
+          <BookingStepCard step={2} title="Select date">
+            <label className="space-y-1 text-sm">
+              <span className="font-medium text-zinc-800">2. Date</span>
+              <input
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+                min={minDate}
+                required
+                type="date"
+                value={date}
+                onChange={(event) => onDateChange(event.target.value)}
+              />
+            </label>
+          </BookingStepCard>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Phone</span>
-        <input
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-        />
-      </label>
+          <BookingStepCard step={3} title="Display available time slots" description="Slots are generated by the scheduling engine.">
+            {loadingSlots ? <p className="text-sm text-zinc-600">Checking availability...</p> : null}
+            {!loadingSlots && date && slots.length === 0 ? (
+              <p className="text-sm text-zinc-600">No available times for this date.</p>
+            ) : null}
+            <label className="space-y-1 text-sm">
+              <span className="font-medium text-zinc-800">3. Available time slots</span>
+              <select
+                aria-label="3. Available time slots"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 disabled:bg-zinc-100"
+                disabled={!date || loadingSlots || slots.length === 0}
+                required
+                value={slotValue}
+                onChange={(event) => setSlotValue(event.target.value)}
+              >
+                <option value="">{date ? "Select a time" : "Choose a date first"}</option>
+                {slots.map((slot) => (
+                  <option key={slot.startTime} value={slot.startTime}>
+                    {formatTime(slot.startTime)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </BookingStepCard>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Notes</span>
-        <textarea
-          className="min-h-24 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-        />
-      </label>
+          <BookingStepCard step={4} title="Enter client details">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="font-medium text-zinc-800">Name</span>
+                <input
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+                  required
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </label>
 
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-        <p className="font-medium">Review</p>
-        <p>{selectedService ? selectedService.name : "No service selected"}</p>
-        <p>{slotValue ? new Date(slotValue).toLocaleString() : "No time selected"}</p>
-      </div>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-zinc-800">Email</span>
+                <input
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
 
-      <button
-        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-        disabled={booking || !slotValue || !name}
-        type="submit"
-      >
-        {booking ? "Booking..." : "6. Confirm booking"}
-      </button>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-zinc-800">Phone</span>
+                <input
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+                  required
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                />
+              </label>
+            </div>
+          </BookingStepCard>
 
-      {message ? <p className="text-sm text-zinc-700">{message}</p> : null}
-    </form>
+          <BookingStepCard step={5} title="Confirm booking">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
+              <p className="font-medium text-zinc-900">Review</p>
+              <p>Service: {selectedService ? selectedService.name : "Not selected"}</p>
+              <p>Time: {selectedSlot ? formatDateTime(selectedSlot.startTime) : "Not selected"}</p>
+            </div>
+
+            <button
+              className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              disabled={booking || !slotValue || !name || !email || !phone}
+              type="submit"
+            >
+              {booking ? "Booking..." : "5. Confirm booking"}
+            </button>
+          </BookingStepCard>
+        </form>
+      )}
+
+      {errorMessage ? <p className="text-sm text-red-700">{errorMessage}</p> : null}
+      {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
+    </div>
   );
 }

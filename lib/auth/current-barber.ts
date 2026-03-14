@@ -5,6 +5,24 @@ import { prisma } from "@/lib/db/prisma";
 import { UnauthorizedError } from "@/lib/utils/errors";
 import { slugify } from "@/lib/utils/slug";
 
+const defaultAvailabilityTemplate = [
+  { dayOfWeek: 1, startTimeLocal: "09:00", endTimeLocal: "17:00" },
+  { dayOfWeek: 2, startTimeLocal: "09:00", endTimeLocal: "17:00" },
+  { dayOfWeek: 3, startTimeLocal: "09:00", endTimeLocal: "17:00" },
+  { dayOfWeek: 4, startTimeLocal: "09:00", endTimeLocal: "17:00" },
+  { dayOfWeek: 5, startTimeLocal: "09:00", endTimeLocal: "17:00" },
+] as const;
+
+function buildDefaultAvailabilityRules(barberId: string) {
+  return defaultAvailabilityTemplate.map((rule) => ({
+    barberId,
+    dayOfWeek: rule.dayOfWeek,
+    startTimeLocal: rule.startTimeLocal,
+    endTimeLocal: rule.endTimeLocal,
+    isActive: true,
+  }));
+}
+
 async function buildUniqueSlug(base: string): Promise<string> {
   let candidate = base || "barber";
   let suffix = 1;
@@ -47,16 +65,24 @@ export async function getOrCreateCurrentBarber(): Promise<Barber> {
   const baseSlug = slugify(user.username || rawName || userId.slice(0, 8)) || "barber";
   const slug = await buildUniqueSlug(baseSlug);
 
-  return prisma.barber.create({
-    data: {
-      clerkUserId: userId,
-      slug,
-      name,
-      businessName: null,
-      email,
-      phone: null,
-      location: null,
-      timezone: "America/New_York",
-    },
+  return prisma.$transaction(async (tx) => {
+    const barber = await tx.barber.create({
+      data: {
+        clerkUserId: userId,
+        slug,
+        name,
+        businessName: null,
+        email,
+        phone: null,
+        location: null,
+        timezone: "America/New_York",
+      },
+    });
+
+    await tx.availabilityRule.createMany({
+      data: buildDefaultAvailabilityRules(barber.id),
+    });
+
+    return barber;
   });
 }

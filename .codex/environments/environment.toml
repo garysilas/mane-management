@@ -9,3 +9,23 @@ script = ""
 name = "Run"
 icon = "run"
 command = "npm rum dev:local"
+
+[[actions]]
+name = "Test"
+icon = "test"
+command = "npm test"
+
+[[actions]]
+name = "Test:End-to-End"
+icon = "test"
+command = "npm run test:e2e"
+
+[[actions]]
+name = "Prisma: Generate"
+icon = "run"
+command = "npm run prisma:generate"
+
+[[actions]]
+name = "Prisma: Migrate"
+icon = "run"
+command = "npm run prisma:migrate"

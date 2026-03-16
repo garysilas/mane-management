@@ -206,7 +206,7 @@ export function PublicBookingForm({ slug }: Props) {
         return;
       }
 
-      setSuccessMessage("Booking confirmed. Confirmation sent.");
+      setSuccessMessage("Booking confirmed.");
       setSlotValue("");
       setName("");
       setEmail("");

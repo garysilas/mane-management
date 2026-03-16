@@ -31,14 +31,14 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify([
         {
-          startTime: "2026-03-10T15:00:00.000Z",
-          endTime: "2026-03-10T15:30:00.000Z",
+          startTime: "2099-03-10T15:00:00.000Z",
+          endTime: "2099-03-10T15:30:00.000Z",
         },
       ]),
     });
   });
 
-  await page.route("**/api/appointments", async (route) => {
+  await page.route("**/api/public/jayfades/book", async (route) => {
     await route.fulfill({
       status: 201,
       contentType: "application/json",
@@ -48,14 +48,14 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
 
   await page.goto("/jayfades");
 
-  await page.getByLabel("2. Date").fill("2026-03-10");
+  await page.getByLabel("2. Date").fill("2099-03-10");
 
-  await page.getByLabel("3. Available time slots").selectOption("2026-03-10T15:00:00.000Z");
+  await page.getByLabel("3. Available time slots").selectOption("2099-03-10T15:00:00.000Z");
   await page.getByLabel("Name").fill("Alex Client");
   await page.getByLabel("Email").fill("alex@example.com");
   await page.getByLabel("Phone").fill("+15555550100");
 
   await page.getByRole("button", { name: "5. Confirm booking" }).click();
 
-  await expect(page.getByText("Booking confirmed. Confirmation sent.")).toBeVisible();
+  await expect(page.getByText("Booking confirmed.")).toBeVisible();
 });

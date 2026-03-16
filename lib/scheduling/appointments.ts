@@ -26,43 +26,169 @@ type CreateAppointmentInput = {
   };
 };
 
+export type ExistingClientRecord = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+};
+
+export type BookingClientInput = CreateAppointmentInput["client"];
+
 const MAX_TRANSACTION_RETRIES = 2;
+
+function normalizeOptionalText(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function dedupeClientsById(clients: ExistingClientRecord[]): ExistingClientRecord[] {
+  const uniqueClients = new Map<string, ExistingClientRecord>();
+
+  for (const client of clients) {
+    if (!uniqueClients.has(client.id)) {
+      uniqueClients.set(client.id, client);
+    }
+  }
+
+  return Array.from(uniqueClients.values());
+}
+
+function hasExactContactMatch(existing: ExistingClientRecord, client: BookingClientInput): boolean {
+  const email = normalizeOptionalText(client.email);
+  const phone = normalizeOptionalText(client.phone);
+
+  return Boolean(email && phone && existing.email === email && existing.phone === phone);
+}
+
+function isCompatibleClient(existing: ExistingClientRecord, client: BookingClientInput): boolean {
+  const email = normalizeOptionalText(client.email);
+  const phone = normalizeOptionalText(client.phone);
+
+  const emailIsCompatible = !email || !existing.email || existing.email === email;
+  const phoneIsCompatible = !phone || !existing.phone || existing.phone === phone;
+
+  return emailIsCompatible && phoneIsCompatible;
+}
+
+export function selectClientForBooking(params: {
+  emailMatches: ExistingClientRecord[];
+  phoneMatches: ExistingClientRecord[];
+  client: BookingClientInput;
+}): ExistingClientRecord | null {
+  const candidates = dedupeClientsById([...params.emailMatches, ...params.phoneMatches]);
+
+  const exactMatches = candidates.filter((candidate) => hasExactContactMatch(candidate, params.client));
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  if (exactMatches.length > 1) {
+    return null;
+  }
+
+  const compatibleMatches = candidates.filter((candidate) => isCompatibleClient(candidate, params.client));
+  if (compatibleMatches.length === 1) {
+    return compatibleMatches[0];
+  }
+
+  return null;
+}
+
+export function buildClientUpdateData(params: {
+  existing: ExistingClientRecord;
+  client: BookingClientInput;
+}): Prisma.ClientUpdateInput {
+  const email = normalizeOptionalText(params.client.email);
+  const phone = normalizeOptionalText(params.client.phone);
+  const notes = normalizeOptionalText(params.client.notes);
+
+  const data: Prisma.ClientUpdateInput = {
+    email: params.existing.email ?? email,
+    phone: params.existing.phone ?? phone,
+    notes: params.existing.notes ?? notes,
+  };
+
+  if (hasExactContactMatch(params.existing, params.client)) {
+    data.name = params.client.name;
+  }
+
+  return data;
+}
 
 async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateAppointmentInput) {
   const { barberId, client } = input;
-  const orConditions = [
-    client.email ? { email: client.email } : null,
-    client.phone ? { phone: client.phone } : null,
-  ].filter(Boolean) as Array<{ email?: string; phone?: string }>;
+  const email = normalizeOptionalText(client.email);
+  const phone = normalizeOptionalText(client.phone);
+  const notes = normalizeOptionalText(client.notes);
 
-  if (orConditions.length > 0) {
-    const existing = await tx.client.findFirst({
-      where: {
-        barberId,
-        OR: orConditions,
-      },
-    });
+  const [emailMatches, phoneMatches] = await Promise.all([
+    email
+      ? tx.client.findMany({
+          where: {
+            barberId,
+            email,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            notes: true,
+          },
+        })
+      : Promise.resolve([]),
+    phone
+      ? tx.client.findMany({
+          where: {
+            barberId,
+            phone,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            notes: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
-    if (existing) {
-      return tx.client.update({
-        where: { id: existing.id },
-        data: {
-          name: client.name,
-          email: client.email,
-          phone: client.phone,
-          notes: client.notes,
+  const existing = selectClientForBooking({
+    emailMatches,
+    phoneMatches,
+    client: {
+      ...client,
+      email,
+      phone,
+      notes,
+    },
+  });
+
+  if (existing) {
+    return tx.client.update({
+      where: { id: existing.id },
+      data: buildClientUpdateData({
+        existing,
+        client: {
+          ...client,
+          email,
+          phone,
+          notes,
         },
-      });
-    }
+      }),
+    });
   }
 
   return tx.client.create({
     data: {
       barberId,
       name: client.name,
-      email: client.email,
-      phone: client.phone,
-      notes: client.notes,
+      email,
+      phone,
+      notes,
     },
   });
 }

@@ -155,9 +155,10 @@ Important responsibilities:
 - computes `endTime` from service duration
 - reads overlapping existing appointments
 - checks availability inside a serializable transaction
-- finds or creates a client record
+- finds or creates a client record with conservative merge rules
 - creates the appointment
 - creates reminder rows scheduled 24 hours before the appointment
+- leaves confirmation delivery as best-effort so Twilio/Resend failures do not roll back the booking
 
 The conflict prevention story is strongest part of the current business logic. The unit tests cover availability window subtraction, slot generation, and cancelled-appointment behavior.
 
@@ -219,16 +220,16 @@ Consequences:
 
 This affects `lib/utils/time.ts`, `lib/scheduling/engine.ts`, and `app/api/public/[slug]/slots/route.ts`.
 
-### Booking endpoint drift already exists
+### Booking creation is shared, but there are still two public entry points
 
 There are two booking creation routes:
 
 - `app/api/appointments/route.ts`
 - `app/api/public/[slug]/book/route.ts`
 
-They are nearly duplicated, and the Playwright spec still mocks `POST /api/appointments` even though the public form submits to `POST /api/public/[slug]/book`.
+They now delegate to the same shared booking logic and return the same payload shape, and the Playwright spec mocks the live public endpoint again.
 
-That is a maintenance trap and a sign the tests have fallen behind the app shape.
+That reduces drift, but it still means future booking changes should update both entry points intentionally rather than letting one become a hidden fork.
 
 ### Payments are mostly schema-level right now
 
@@ -252,15 +253,16 @@ Also note that booking confirmation messages are sent immediately from the reque
 
 That means the engine supports a feature the product cannot realistically use yet.
 
-### Client deduping is simplistic
+### Client deduping is safer, not solved
 
-`findOrCreateClient()` treats a matching email or phone as the same person and overwrites that client’s name/contact/notes on booking.
+`findOrCreateClient()` no longer blindly overwrites a matched client. It only merges when the existing record is compatible with the incoming contact data, and it refuses ambiguous merges.
 
-That is convenient for an MVP but brittle if:
+That is better for an MVP, but there are still limits:
 
 - family members share a phone number
 - a client reuses an email for someone else
-- one booking comes with partial data and another with fuller data
+- duplicate client rows already exist for the same real person
+- there is still no explicit identity resolution or merge workflow
 
 ### Client notes are stored as a single blob
 
@@ -274,11 +276,11 @@ That makes editing, searching, auditing, and concurrent note updates awkward.
 
 Today, the real source of truth is lazy creation from `getOrCreateCurrentBarber()`, not webhook-driven provisioning.
 
-### Slug creation can race
+### Slug creation is retried, but bootstrap still depends on lazy creation
 
-`buildUniqueSlug()` loops with `findUnique()` calls before the transaction creates the barber. Under concurrent first-login requests for the same base slug, this can still lose a race on the unique constraint.
+`getOrCreateCurrentBarber()` now retries when a concurrent first-login request wins the slug race, and it also re-reads by `clerkUserId` if another request created the barber first.
 
-There is no retry path for that case yet.
+That closes the obvious unique-constraint race, but the broader onboarding story is still lazy request-time provisioning instead of a dedicated signup flow or webhook-driven sync.
 
 ## How to work safely in this codebase
 
@@ -290,6 +292,6 @@ There is no retry path for that case yet.
 
 ## Current verification status
 
-I ran the unit suite with `npm test`; all 18 unit tests passed.
+I reran the unit suite with `npm test`; all 23 unit tests passed.
 
-I also attempted `npm run test:e2e`, but the run did not complete cleanly in this environment because the local Next.js dev server could not be started consistently from Playwright. Independent of that environment issue, the spec also appears stale because it mocks the old booking endpoint.
+I also reran the public booking Playwright spec with `npm run test:e2e -- tests/e2e/booking-flow.spec.ts`; it passed after updating the mock to the live public booking endpoint.

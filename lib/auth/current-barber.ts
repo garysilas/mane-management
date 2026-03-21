@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import type { Barber } from "@prisma/client";
+import { Prisma, type Barber } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { UnauthorizedError } from "@/lib/utils/errors";
@@ -13,6 +13,8 @@ const defaultAvailabilityTemplate = [
   { dayOfWeek: 5, startTimeLocal: "09:00", endTimeLocal: "17:00" },
 ] as const;
 
+const MAX_BARBER_BOOTSTRAP_RETRIES = 3;
+
 function buildDefaultAvailabilityRules(barberId: string) {
   return defaultAvailabilityTemplate.map((rule) => ({
     barberId,
@@ -23,8 +25,22 @@ function buildDefaultAvailabilityRules(barberId: string) {
   }));
 }
 
+function isUniqueConstraintErrorForField(error: unknown, field: string): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  if (Array.isArray(target)) {
+    return target.includes(field);
+  }
+
+  return target === field;
+}
+
 async function buildUniqueSlug(base: string): Promise<string> {
-  let candidate = base || "barber";
+  const baseCandidate = base || "barber";
+  let candidate = baseCandidate;
   let suffix = 1;
 
   while (true) {
@@ -33,7 +49,7 @@ async function buildUniqueSlug(base: string): Promise<string> {
       return candidate;
     }
 
-    candidate = `${base}-${suffix}`;
+    candidate = `${baseCandidate}-${suffix}`;
     suffix += 1;
   }
 }
@@ -63,26 +79,46 @@ export async function getOrCreateCurrentBarber(): Promise<Barber> {
   const rawName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
   const name = rawName || user.username || "Barber";
   const baseSlug = slugify(user.username || rawName || userId.slice(0, 8)) || "barber";
-  const slug = await buildUniqueSlug(baseSlug);
 
-  return prisma.$transaction(async (tx) => {
-    const barber = await tx.barber.create({
-      data: {
-        clerkUserId: userId,
-        slug,
-        name,
-        businessName: null,
-        email,
-        phone: null,
-        location: null,
-        timezone: "America/New_York",
-      },
-    });
+  for (let attempt = 0; attempt < MAX_BARBER_BOOTSTRAP_RETRIES; attempt += 1) {
+    const slug = await buildUniqueSlug(baseSlug);
 
-    await tx.availabilityRule.createMany({
-      data: buildDefaultAvailabilityRules(barber.id),
-    });
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const barber = await tx.barber.create({
+          data: {
+            clerkUserId: userId,
+            slug,
+            name,
+            businessName: null,
+            email,
+            phone: null,
+            location: null,
+            timezone: "America/New_York",
+          },
+        });
 
-    return barber;
-  });
+        await tx.availabilityRule.createMany({
+          data: buildDefaultAvailabilityRules(barber.id),
+        });
+
+        return barber;
+      });
+    } catch (error) {
+      if (isUniqueConstraintErrorForField(error, "clerkUserId")) {
+        const createdBarber = await prisma.barber.findUnique({ where: { clerkUserId: userId } });
+        if (createdBarber) {
+          return createdBarber;
+        }
+      }
+
+      if (isUniqueConstraintErrorForField(error, "slug") && attempt < MAX_BARBER_BOOTSTRAP_RETRIES - 1) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Unable to create barber profile.");
 }

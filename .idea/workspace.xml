@@ -4,7 +4,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ede0bb59-b8fc-400d-b173-bc844ca87f98" name="Changes" comment="" />
+    <list default="true" id="ede0bb59-b8fc-400d-b173-bc844ca87f98" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/public/[slug]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/public/[slug]/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/public/[slug]/slots/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/public/[slug]/slots/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/components/booking/public-booking-form.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/components/booking/public-booking-form.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/bookings/create-booking.ts" beforeDir="false" afterPath="$PROJECT_DIR$/lib/bookings/create-booking.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/scheduling/engine.ts" beforeDir="false" afterPath="$PROJECT_DIR$/lib/scheduling/engine.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/scheduling/slots.ts" beforeDir="false" afterPath="$PROJECT_DIR$/lib/scheduling/slots.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/utils/time.ts" beforeDir="false" afterPath="$PROJECT_DIR$/lib/utils/time.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/e2e/booking-flow.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/tests/e2e/booking-flow.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/barber-availability.test.ts" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/barber-availability.test.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/slot-generation.test.ts" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/slot-generation.test.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/types/index.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -16,7 +30,7 @@
     </persistenceIdMap>
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="120" />
+    <option name="cachedIndexableFilesCount" value="121" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="Git.Settings">
@@ -72,7 +86,7 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "codex/timezone-correct-booking",
     "javascript.preferred.runtime.type.id": "node",
     "js.debugger.nextJs.config.created.client": "true",
     "js.debugger.nextJs.config.created.server": "true",
@@ -181,7 +195,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-WS-253.31033.133" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-WS-253.32098.39" />
       </set>
     </attachedChunks>
   </component>

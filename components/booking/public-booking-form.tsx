@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { PublicBarberProfile, PublicBookingBootstrap, PublicService, Slot } from "@/types";
 import { BarberProfileCard } from "@/components/booking/barber-profile-card";
 import { BookingStepCard } from "@/components/booking/booking-step-card";
+import { formatDateTimeInTimeZone, formatTimeInTimeZone, getCurrentDateInTimeZone } from "@/lib/utils/time";
 
 type Props = {
   slug: string;
@@ -12,28 +13,6 @@ type Props = {
 
 function formatCurrency(priceCents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(priceCents / 100);
-}
-
-function formatTime(value: string): string {
-  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function getLocalDateInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 export function PublicBookingForm({ slug }: Props) {
@@ -56,7 +35,7 @@ export function PublicBookingForm({ slug }: Props) {
   const [booking, setBooking] = useState<boolean>(false);
   const latestSlotsRequestRef = useRef(0);
 
-  const minDate = useMemo(() => getLocalDateInputValue(new Date()), []);
+  const minDate = useMemo(() => getCurrentDateInTimeZone(barber?.timezone ?? "UTC"), [barber?.timezone]);
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === serviceId),
@@ -309,6 +288,7 @@ export function PublicBookingForm({ slug }: Props) {
             ) : null}
             <label className="space-y-1 text-sm">
               <span className="font-medium text-zinc-800">3. Available time slots</span>
+              <p className="text-xs text-zinc-500">Times shown in {barber.timezone}.</p>
               <select
                 aria-label="3. Available time slots"
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 disabled:bg-zinc-100"
@@ -320,7 +300,7 @@ export function PublicBookingForm({ slug }: Props) {
                 <option value="">{date ? "Select a time" : "Choose a date first"}</option>
                 {slots.map((slot) => (
                   <option key={slot.startTime} value={slot.startTime}>
-                    {formatTime(slot.startTime)}
+                    {formatTimeInTimeZone(slot.startTime, barber.timezone)}
                   </option>
                 ))}
               </select>
@@ -367,7 +347,12 @@ export function PublicBookingForm({ slug }: Props) {
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
               <p className="font-medium text-zinc-900">Review</p>
               <p>Service: {selectedService ? selectedService.name : "Not selected"}</p>
-              <p>Time: {selectedSlot ? formatDateTime(selectedSlot.startTime) : "Not selected"}</p>
+              <p>
+                Time:{" "}
+                {selectedSlot
+                  ? `${formatDateTimeInTimeZone(selectedSlot.startTime, barber.timezone)} (${barber.timezone})`
+                  : "Not selected"}
+              </p>
             </div>
 
             <button

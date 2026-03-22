@@ -8,16 +8,9 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
-import {
-  getBarberAvailabilityForDate,
-  isTimeSlotAvailable,
-  overlaps,
-  type AppointmentWindow,
-  type AvailabilityRuleInput,
-  type TimeOffWindow,
-} from "@/lib/scheduling/engine";
+import { getBarberAvailabilityForDate, isTimeSlotAvailable } from "@/lib/scheduling/engine";
 import { ConflictError, NotFoundError } from "@/lib/utils/errors";
-import { addMinutes } from "@/lib/utils/time";
+import { addMinutes, endOfTimeZoneDay, getDateStringInTimeZone, startOfTimeZoneDay } from "@/lib/utils/time";
 
 type CreateAppointmentInput = {
   barberId: string;
@@ -264,6 +257,7 @@ export async function createAppointment(input: CreateAppointmentInput) {
             where: { id: input.barberId },
             select: {
               id: true,
+              timezone: true,
               availability: {
                 where: { isActive: true },
                 select: {
@@ -295,17 +289,40 @@ export async function createAppointment(input: CreateAppointmentInput) {
           const startTime = input.startTime;
           const endTime = addMinutes(startTime, service.durationMinutes);
 
+          if (startTime <= new Date()) {
+            throw new ConflictError("This time slot is no longer available.");
+          }
+
+          const localDate = getDateStringInTimeZone(startTime, barber.timezone);
+          const dayStart = startOfTimeZoneDay(localDate, barber.timezone);
+          const dayEnd = endOfTimeZoneDay(localDate, barber.timezone);
+
           const timeOffBlocks = await tx.timeOffBlock.findMany({
             where: {
               barberId: input.barberId,
-              startTime: { lt: endTime },
-              endTime: { gt: startTime },
+              startTime: { lt: dayEnd },
+              endTime: { gt: dayStart },
             },
             select: {
               startTime: true,
               endTime: true,
             },
           });
+
+          const availabilityWindows = getBarberAvailabilityForDate({
+            date: localDate,
+            timeZone: barber.timezone,
+            availabilityRules: barber.availability,
+            timeOffBlocks,
+          });
+
+          const slotFallsWithinAvailability = availabilityWindows.some(
+            (window) => startTime >= window.startTime && endTime <= window.endTime,
+          );
+
+          if (!slotFallsWithinAvailability) {
+            throw new ConflictError("This time slot is no longer available.");
+          }
 
           const existingAppointments = await tx.appointment.findMany({
             where: {

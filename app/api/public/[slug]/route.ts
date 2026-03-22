@@ -16,6 +16,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
       name: true,
       businessName: true,
       location: true,
+      timezone: true,
       services: {
         where: {
           isActive: true,
@@ -42,6 +43,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
       name: barber.name,
       businessName: barber.businessName,
       location: barber.location,
+      timezone: barber.timezone,
     },
     services: barber.services,
   });

@@ -14,7 +14,9 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: `npm run dev -- --port ${port}`,
+    command:
+      `RESEND_API_KEY="" RESEND_FROM_EMAIL="" TWILIO_ACCOUNT_SID="" ` +
+      `TWILIO_AUTH_TOKEN="" TWILIO_FROM_PHONE="" npm run dev -- --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

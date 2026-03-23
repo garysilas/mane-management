@@ -222,6 +222,21 @@ export async function createAppointment(input: CreateAppointmentInput) {
           const startTime = input.startTime;
           const endTime = addMinutes(startTime, service.durationMinutes);
 
+          const overlappingTimeOffBlock = await tx.timeOffBlock.findFirst({
+            where: {
+              barberId: input.barberId,
+              startTime: { lt: endTime },
+              endTime: { gt: startTime },
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          if (overlappingTimeOffBlock) {
+            throw new ConflictError("This time slot is no longer available.");
+          }
+
           const existingAppointments = await tx.appointment.findMany({
             where: {
               barberId: input.barberId,

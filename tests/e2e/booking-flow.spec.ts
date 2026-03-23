@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ timezoneId: "America/Los_Angeles" });
+
 test("public booking flow completes with mocked APIs", async ({ page }) => {
   await page.route("**/api/public/jayfades", async (route) => {
     await route.fulfill({
@@ -11,6 +13,7 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
           name: "Jay",
           businessName: "Jay Fades",
           location: "Brooklyn",
+          timezone: "America/New_York",
         },
         services: [
           {
@@ -31,8 +34,8 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify([
         {
-          startTime: "2099-03-10T15:00:00.000Z",
-          endTime: "2099-03-10T15:30:00.000Z",
+          startTime: "2099-01-10T15:00:00.000Z",
+          endTime: "2099-01-10T15:30:00.000Z",
         },
       ]),
     });
@@ -48,9 +51,13 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
 
   await page.goto("/jayfades");
 
-  await page.getByLabel("2. Date").fill("2099-03-10");
+  await page.getByLabel("2. Date").fill("2099-01-10");
 
-  await page.getByLabel("3. Available time slots").selectOption("2099-03-10T15:00:00.000Z");
+  await expect(page.getByText("Times shown in America/New_York.")).toBeVisible();
+  await expect(page.locator('option[value="2099-01-10T15:00:00.000Z"]')).toHaveText("10:00 AM");
+
+  await page.getByLabel("3. Available time slots").selectOption("2099-01-10T15:00:00.000Z");
+  await expect(page.getByText("Time: Sat, Jan 10, 10:00 AM (America/New_York)")).toBeVisible();
   await page.getByLabel("Name").fill("Alex Client");
   await page.getByLabel("Email").fill("alex@example.com");
   await page.getByLabel("Phone").fill("+15555550100");

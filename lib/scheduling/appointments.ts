@@ -8,9 +8,9 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
-import { isTimeSlotAvailable } from "@/lib/scheduling/engine";
+import { getBarberAvailabilityForDate, isTimeSlotAvailable } from "@/lib/scheduling/engine";
 import { ConflictError, NotFoundError } from "@/lib/utils/errors";
-import { addMinutes } from "@/lib/utils/time";
+import { addMinutes, endOfTimeZoneDay, getDateStringInTimeZone, startOfTimeZoneDay } from "@/lib/utils/time";
 
 type CreateAppointmentInput = {
   barberId: string;
@@ -37,6 +37,27 @@ export type ExistingClientRecord = {
 export type BookingClientInput = CreateAppointmentInput["client"];
 
 const MAX_TRANSACTION_RETRIES = 2;
+
+export type AppointmentLifecycleStatus =
+  | AppointmentStatus.CANCELLED
+  | AppointmentStatus.COMPLETED
+  | AppointmentStatus.NO_SHOW;
+
+export function canTransitionAppointmentStatus(
+  currentStatus: AppointmentStatus,
+  nextStatus: AppointmentStatus,
+): nextStatus is AppointmentLifecycleStatus {
+  return (
+    currentStatus === AppointmentStatus.BOOKED &&
+    (nextStatus === AppointmentStatus.CANCELLED ||
+      nextStatus === AppointmentStatus.COMPLETED ||
+      nextStatus === AppointmentStatus.NO_SHOW)
+  );
+}
+
+function requiresPastAppointmentForStatus(status: AppointmentLifecycleStatus): boolean {
+  return status === AppointmentStatus.COMPLETED || status === AppointmentStatus.NO_SHOW;
+}
 
 function normalizeOptionalText(value?: string | null): string | null {
   const trimmed = value?.trim();
@@ -193,6 +214,56 @@ async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateApp
   });
 }
 
+export async function updateAppointmentStatus(input: {
+  appointmentId: string;
+  barberId: string;
+  status: AppointmentLifecycleStatus;
+}) {
+  const now = new Date();
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      id: input.appointmentId,
+      barberId: input.barberId,
+    },
+    select: {
+      id: true,
+      startTime: true,
+      status: true,
+    },
+  });
+
+  if (!appointment) {
+    throw new NotFoundError("Appointment not found.");
+  }
+
+  if (!canTransitionAppointmentStatus(appointment.status, input.status)) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
+  }
+
+  if (requiresPastAppointmentForStatus(input.status) && appointment.startTime >= now) {
+    throw new ConflictError("Only past appointments can be marked as completed or no show.");
+  }
+
+  const result = await prisma.appointment.updateMany({
+    where: {
+      id: appointment.id,
+      barberId: input.barberId,
+      status: AppointmentStatus.BOOKED,
+      ...(requiresPastAppointmentForStatus(input.status) ? { startTime: { lt: now } } : {}),
+    },
+    data: { status: input.status },
+  });
+
+  if (result.count !== 1) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
+  }
+
+  return {
+    id: appointment.id,
+    status: input.status,
+  };
+}
+
 export async function createAppointment(input: CreateAppointmentInput) {
   for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
     try {
@@ -200,7 +271,19 @@ export async function createAppointment(input: CreateAppointmentInput) {
         async (tx) => {
           const barber = await tx.barber.findUnique({
             where: { id: input.barberId },
-            select: { id: true },
+            select: {
+              id: true,
+              timezone: true,
+              availability: {
+                where: { isActive: true },
+                select: {
+                  dayOfWeek: true,
+                  startTimeLocal: true,
+                  endTimeLocal: true,
+                  isActive: true,
+                },
+              },
+            },
           });
 
           if (!barber) {
@@ -222,6 +305,21 @@ export async function createAppointment(input: CreateAppointmentInput) {
           const startTime = input.startTime;
           const endTime = addMinutes(startTime, service.durationMinutes);
 
+          const overlappingTimeOffBlock = await tx.timeOffBlock.findFirst({
+            where: {
+              barberId: input.barberId,
+              startTime: { lt: endTime },
+              endTime: { gt: startTime },
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          if (overlappingTimeOffBlock) {
+            throw new ConflictError("This time slot is no longer available.");
+          }
+
           const existingAppointments = await tx.appointment.findMany({
             where: {
               barberId: input.barberId,
@@ -236,14 +334,16 @@ export async function createAppointment(input: CreateAppointmentInput) {
             },
           });
 
-          const slotIsAvailable = isTimeSlotAvailable({
+          const validationError = getBookingValidationError({
             proposedStartTime: startTime,
             proposedEndTime: endTime,
+            availabilityRules: barber.availability,
+            timeOffBlocks,
             appointments: existingAppointments,
           });
 
-          if (!slotIsAvailable) {
-            throw new ConflictError("This time slot is no longer available.");
+          if (validationError) {
+            throw new ConflictError(validationError);
           }
 
           const client = await findOrCreateClient(tx, input);
@@ -304,12 +404,12 @@ export async function createAppointment(input: CreateAppointmentInput) {
       }
 
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-        throw new ConflictError("This time slot is no longer available.");
+        throw new ConflictError(BOOKING_VALIDATION_ERRORS.overlap);
       }
 
       throw error;
     }
   }
 
-  throw new ConflictError("This time slot is no longer available.");
+  throw new ConflictError(BOOKING_VALIDATION_ERRORS.overlap);
 }

@@ -11,6 +11,7 @@ export type PublicBarberProfile = {
   name: string;
   businessName: string | null;
   location: string | null;
+  timezone: string;
 };
 
 export type PublicBookingBootstrap = {

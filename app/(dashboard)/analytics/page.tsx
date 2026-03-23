@@ -10,6 +10,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Basic Analytics</h2>
+      <p className="text-sm text-zinc-600">Operational counts only for the current MVP.</p>
       <dl className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-zinc-200 p-3">
           <dt className="text-sm text-zinc-500">Upcoming appointments</dt>
@@ -22,14 +23,6 @@ export default async function AnalyticsPage() {
         <div className="rounded-lg border border-zinc-200 p-3">
           <dt className="text-sm text-zinc-500">Completed appointments</dt>
           <dd className="text-2xl font-semibold">{analytics.completedCount}</dd>
-        </div>
-        <div className="rounded-lg border border-zinc-200 p-3">
-          <dt className="text-sm text-zinc-500">Revenue</dt>
-          <dd className="text-2xl font-semibold">
-            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-              analytics.totalRevenueCents / 100,
-            )}
-          </dd>
         </div>
       </dl>
     </div>

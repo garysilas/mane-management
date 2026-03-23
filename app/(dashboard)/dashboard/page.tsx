@@ -11,12 +11,6 @@ export default async function DashboardPage() {
     { label: "Upcoming Appointments", value: analytics.upcomingCount.toString() },
     { label: "Clients", value: analytics.clientCount.toString() },
     { label: "Completed Appointments", value: analytics.completedCount.toString() },
-    {
-      label: "Revenue",
-      value: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-        analytics.totalRevenueCents / 100,
-      ),
-    },
   ];
 
   return (

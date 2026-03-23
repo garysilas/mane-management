@@ -9,7 +9,8 @@ export default function HomePage() {
           Barber-first scheduling and business management.
         </h1>
         <p className="mt-4 max-w-2xl text-zinc-600">
-          MVP foundation: auth, services, public booking, appointment conflict prevention, reminders, and analytics.
+          MVP foundation: auth, services, public booking, appointment conflict prevention, reminders, and basic
+          operational reporting.
         </p>
       </header>
 
@@ -19,7 +20,7 @@ export default function HomePage() {
           href="/dashboard"
         >
           <h2 className="text-xl font-semibold">Open Barber Dashboard</h2>
-          <p className="mt-2 text-sm text-zinc-600">Manage services, clients, appointments, payments, and analytics.</p>
+          <p className="mt-2 text-sm text-zinc-600">Manage services, clients, appointments, and scheduling.</p>
         </Link>
 
         <Link

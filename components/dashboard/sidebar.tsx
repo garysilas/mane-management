@@ -8,7 +8,6 @@ const navItems = [
   { href: "/calendar", label: "Calendar" },
   { href: "/services", label: "Services" },
   { href: "/clients", label: "Clients" },
-  { href: "/payments", label: "Payments" },
   { href: "/analytics", label: "Analytics" },
   { href: "/settings", label: "Settings" },
 ];

@@ -1,9 +1,9 @@
-import { AppointmentStatus, PaymentStatus } from "@prisma/client";
+import { AppointmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 
 export async function getBarberAnalytics(barberId: string) {
-  const [upcomingCount, clientCount, completedCount, totalRevenue] = await Promise.all([
+  const [upcomingCount, clientCount, completedCount] = await Promise.all([
     prisma.appointment.count({
       where: {
         barberId,
@@ -13,16 +13,11 @@ export async function getBarberAnalytics(barberId: string) {
     }),
     prisma.client.count({ where: { barberId } }),
     prisma.appointment.count({ where: { barberId, status: AppointmentStatus.COMPLETED } }),
-    prisma.payment.aggregate({
-      where: { barberId, status: PaymentStatus.SUCCEEDED },
-      _sum: { amountCents: true, tipCents: true },
-    }),
   ]);
 
   return {
     upcomingCount,
     clientCount,
     completedCount,
-    totalRevenueCents: (totalRevenue._sum.amountCents ?? 0) + (totalRevenue._sum.tipCents ?? 0),
   };
 }

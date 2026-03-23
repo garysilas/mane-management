@@ -1,297 +1,379 @@
 # New User Guide
 
-## What this project is
+This guide is for the next engineer who needs to understand the repo quickly, make safe changes, and avoid the current traps.
 
-Mane Manager is an MVP for barber-focused business management built on Next.js App Router. The implemented core is:
+## What This Project Is
 
-- authenticated barber dashboard pages
+Mane Manager is a barber-focused scheduling MVP built with Next.js App Router, Prisma, and Clerk.
+
+The current intended MVP surface is:
+
+- authenticated dashboard pages for barber operations
 - public booking pages at `/{slug}`
 - service management
 - weekly availability rules
-- slot generation and appointment conflict checks
-- basic client, payment, and analytics views
+- time-off blocks
+- client views and append-only notes
+- calendar views with basic appointment status actions
+- operational analytics only
 
-The project already includes schema and scaffolding for payments, reminders, and background jobs, but parts of that surface are still placeholders.
+Payments are not part of the active MVP surface right now. The codebase still contains payment and Stripe scaffolding, but those features are intentionally hidden or gated.
 
-## Stack at a glance
+## Read This First
+
+Before you start building new product work, know these three things:
+
+1. The booking write path is currently regressed.
+   - `lib/scheduling/appointments.ts` is the first file you should inspect.
+2. The Playwright booking test is mocked.
+   - It is useful for UI flow, but it does not validate real booking writes.
+3. Payments are preserved for later.
+   - Do not re-expose them without implementing the full Stripe/payment lifecycle.
+
+## Stack
 
 - Next.js 16 App Router
 - React 19
 - TypeScript
 - Prisma + PostgreSQL
 - Clerk for auth
-- Stripe, Twilio, Resend, Trigger.dev integrations
+- Stripe for future payment work
+- Twilio for SMS
+- Resend for email
+- Trigger.dev for background tasks
 - Vitest for unit tests
-- Playwright for e2e
+- Playwright for browser tests
 
-Useful commands:
+## Useful Commands
 
 ```bash
 npm run dev
+npm run lint
 npm test
 npm run test:e2e
 npm run prisma:generate
 npm run prisma:migrate
 ```
 
-## Directory map
+What they currently mean in practice:
+
+- `npm run lint`
+  - passes, but leaves warnings in `lib/scheduling/appointments.ts`
+- `npm test`
+  - currently fails in booking validation / guardrail suites
+- `npm run test:e2e`
+  - depends on a clean local Next dev-server state and still uses mocked booking APIs
+
+## Repo Layout
 
 ### `app/`
 
 App Router pages and API routes.
 
-- `app/page.tsx`: simple landing page with links into the dashboard and a sample public booking slug.
-- `app/(public)/[slug]/page.tsx`: public booking page shell.
-- `app/(dashboard)/*`: dashboard pages for services, clients, analytics, payments, calendar, and settings.
-- `app/api/public/[slug]/*`: public booking bootstrap, services, slot lookup, and booking creation.
-- `app/api/services/*`: authenticated service CRUD.
-- `app/api/availability/*`: authenticated availability rule CRUD.
-- `app/api/clients/[id]/notes/route.ts`: append a timestamped note onto a client record.
-- `app/api/webhooks/*`: Clerk and Stripe webhook entry points.
+- `app/page.tsx`
+  - landing page
+- `app/(public)/[slug]/page.tsx`
+  - public booking page shell
+- `app/(dashboard)/*`
+  - protected dashboard pages
+- `app/api/public/[slug]/*`
+  - public booking APIs
+- `app/api/services/*`
+  - authenticated service CRUD
+- `app/api/availability/*`
+  - authenticated weekly availability CRUD
+- `app/api/time-off/*`
+  - authenticated time-off CRUD
+- `app/api/appointments/[id]/route.ts`
+  - appointment status updates
+- `app/api/appointments/route.ts`
+  - deprecated endpoint that now returns `410`
+- `app/api/webhooks/*`
+  - Clerk and Stripe webhook entry points
 
 ### `components/`
 
-Mostly thin UI wrappers around the route handlers.
+Mostly thin UI around route handlers and server data.
 
-- `components/booking/*`: public booking UI.
-- `components/forms/*`: service forms, availability manager, client note form, row actions.
-- `components/dashboard/sidebar.tsx`: sidebar navigation for the protected area.
+- `components/booking/*`
+  - public booking UI
+- `components/forms/*`
+  - dashboard forms and action components
+- `components/dashboard/sidebar.tsx`
+  - dashboard navigation
 
-Two forms coexist for services:
+Important note:
 
-- `components/forms/service-form.tsx` is the active one used by the routed create/edit pages.
-- `components/forms/service-manager.tsx` looks like an older all-in-one CRUD component and is not currently used.
+- `components/forms/service-form.tsx` is the active service editor
+- `components/forms/service-manager.tsx` looks like older unused UI
 
 ### `lib/`
 
-Most of the real business logic sits here.
+Most of the business logic lives here.
 
-- `lib/auth/current-barber.ts`: resolves the Clerk user to a `Barber` row and lazily creates one if missing.
-- `lib/db/prisma.ts`: Prisma singleton.
-- `lib/scheduling/*`: slot generation, overlap detection, appointment creation.
-- `lib/validators/*`: Zod schemas for public booking, services, availability, and client notes.
-- `lib/analytics/metrics.ts`: simple aggregate counts and revenue totals.
-- `lib/email/resend.ts`, `lib/messaging/twilio.ts`, `lib/payments/stripe.ts`: integration wrappers.
+- `lib/auth/current-barber.ts`
+  - auth lookup and lazy barber bootstrap
+- `lib/bookings/create-booking.ts`
+  - public booking wrapper around `createAppointment()`
+- `lib/scheduling/*`
+  - booking writes, availability logic, slot generation, conflicts
+- `lib/utils/time.ts`
+  - timezone-aware helpers
+- `lib/analytics/metrics.ts`
+  - dashboard/analytics operational counts
+- `lib/email/resend.ts`
+  - email wrapper, no-ops if env vars are missing
+- `lib/messaging/twilio.ts`
+  - SMS wrapper, no-ops if env vars are missing
+- `lib/payments/stripe.ts`
+  - Stripe client helper preserved for future work
 
 ### `prisma/`
 
-Schema and migrations.
-
-- `prisma/schema.prisma` is the source of truth for the domain model.
-- `prisma/migrations/20260307185731_init/migration.sql` is the initial migration.
+- `prisma/schema.prisma`
+  - source of truth for the data model
+- `prisma/migrations/*`
+  - schema migrations
 
 ### `trigger/`
 
-Background job definitions.
-
-- `trigger/jobs/send-appointment-reminder.ts` defines a reminder task, but it is not wired into booking creation yet.
+- `trigger/jobs/send-appointment-reminder.ts`
+  - reminder task definition
+  - currently not wired to a dispatcher from stored reminder rows
 
 ### `tests/`
 
-- `tests/unit/*`: current source of truth for scheduling and validator behavior.
-- `tests/e2e/booking-flow.spec.ts`: Playwright coverage for the public booking page, but it has drift from the current API shape.
+- `tests/unit/*`
+  - strongest source of truth for scheduling behavior
+- `tests/e2e/booking-flow.spec.ts`
+  - useful UI coverage, but mocked
 
-## Domain model
+## Main Flows
 
-The Prisma schema is straightforward and worth reading before changing anything:
+### 1. Auth And Barber Bootstrap
 
-- `Barber`: the owner account, keyed to Clerk by `clerkUserId`, with `slug` and `timezone`.
-- `Service`: barber-defined offerings with duration, price, and active status.
-- `Client`: barber-scoped customer record.
-- `Appointment`: links barber, client, and service with start/end times and status.
-- `AvailabilityRule`: recurring weekly working hours stored as `dayOfWeek` plus `HH:mm` strings.
-- `TimeOffBlock`: one-off blocked windows.
-- `Payment`: one payment per appointment.
-- `Reminder`: pending/sent reminder records tied to an appointment.
-
-## Main flows
-
-### 1. Barber bootstrap and auth
-
-Protected dashboard pages call `getOrCreateCurrentBarber()` in `lib/auth/current-barber.ts`.
+Protected dashboard pages call `getOrCreateCurrentBarber()` from `lib/auth/current-barber.ts`.
 
 What it does:
 
 - reads the Clerk session
-- finds the `Barber` row by `clerkUserId`
-- if missing, creates a new barber row
-- seeds default Monday-Friday `09:00-17:00` availability rules
-- generates a unique slug from the Clerk profile
+- finds a `Barber` row by `clerkUserId`
+- creates one if missing
+- seeds default Monday-Friday `09:00-17:00` availability
+- generates a unique slug
 
-This means the real onboarding path is lazy. The first authenticated dashboard/API request creates the barber profile instead of a dedicated signup flow or Clerk webhook sync.
+This means onboarding is lazy. There is no dedicated setup wizard or Clerk-to-Prisma sync flow yet.
 
-### 2. Public booking
+### 2. Public Booking
 
-The public booking page lives at `/{slug}` and is backed by four routes:
+The public booking page is `/{slug}`.
 
-- `GET /api/public/[slug]`: returns barber profile and active services.
-- `GET /api/public/[slug]/services`: active services only.
-- `GET /api/public/[slug]/slots`: generates open time slots for a service/date.
-- `POST /api/public/[slug]/book`: validates input and creates the appointment.
+Routes involved:
 
-The browser flow in `components/booking/public-booking-form.tsx` is:
+- `GET /api/public/[slug]`
+- `GET /api/public/[slug]/services`
+- `GET /api/public/[slug]/slots`
+- `POST /api/public/[slug]/book`
 
-1. Load barber + service bootstrap.
-2. Let the client choose a service and date.
-3. Fetch slots for that service/date.
+Current flow:
+
+1. Load barber profile and active services.
+2. Pick a service and date.
+3. Fetch available slots.
 4. Submit booking details.
-5. Refresh slots after success.
+5. Attempt best-effort confirmation delivery.
 
-### 3. Scheduling and conflict prevention
+Important caveat:
 
-The scheduling engine is in `lib/scheduling/engine.ts`.
+- the booking UI flow exists
+- the slot generation path exists
+- the booking write transaction is currently the weakest part of the system and needs repair
 
-Important responsibilities:
+### 3. Scheduling
 
-- merge overlapping availability windows
-- subtract time-off windows
-- round slot starts up to the configured interval
-- reject overlaps against existing appointments
-- ignore cancelled appointments when checking conflicts
+Core files:
 
-`lib/scheduling/appointments.ts` is the booking write path. It:
+- `lib/scheduling/engine.ts`
+- `lib/utils/time.ts`
+- `lib/scheduling/appointments.ts`
 
-- loads the barber and active service
-- computes `endTime` from service duration
-- reads overlapping existing appointments
-- checks availability inside a serializable transaction
-- finds or creates a client record with conservative merge rules
-- creates the appointment
-- creates reminder rows scheduled 24 hours before the appointment
-- leaves confirmation delivery as best-effort so Twilio/Resend failures do not roll back the booking
+Current responsibilities:
 
-The conflict prevention story is strongest part of the current business logic. The unit tests cover availability window subtraction, slot generation, and cancelled-appointment behavior.
+- merge weekly availability windows
+- subtract time-off blocks
+- generate bookable slots
+- ignore cancelled appointments when checking overlaps
+- update appointment lifecycle status for booked appointments
 
-### 4. Dashboard flows
+Good news:
 
-Implemented dashboard behavior is uneven:
+- timezone helpers and slot-generation tests are in better shape than older docs implied
+- availability and time-off APIs are implemented
 
-- `dashboard`: summary metrics from `lib/analytics/metrics.ts`
-- `calendar`: lists upcoming and past appointments
-- `services`: create, edit, activate/deactivate, delete
-- `clients`: list clients and view appointment history
-- `clients/[id]`: append timestamped notes into the client record
-- `settings/availability`: CRUD for weekly availability rules
-- `payments`: read-only list of payment rows
-- `analytics`: read-only duplicate of the dashboard aggregates
+Current problem:
 
-Several dashboard pages are real read/write screens, but payments and analytics are mainly display layers over sparse data.
+- `createAppointment()` is not internally consistent right now and is the source of current test failures
 
-## Business logic worth understanding first
+### 4. Dashboard Operations
 
-### `lib/auth/current-barber.ts`
+### Services
 
-This file controls account bootstrap, slug creation, and default availability seeding. Any change to barber creation or onboarding should start here.
+This is one of the cleanest parts of the app:
 
-### `lib/scheduling/engine.ts`
+- create service
+- edit service
+- activate/deactivate service
+- delete service when not blocked by appointment relations
 
-This is the core scheduling engine. If slots, overlaps, recurring availability, or time off change, update this file and its unit tests together.
+### Availability And Time Off
 
-### `lib/scheduling/appointments.ts`
+Current state:
 
-This is where booking safety lives. It is the write path to study before changing public booking, manual booking, reminders, or client deduping.
+- weekly availability rules can be created, edited, toggled, and deleted
+- time-off blocks can be created and deleted from the current UI
+- the backend also supports updating time-off blocks, but there is no edit UI yet
 
-### `app/api/public/[slug]/slots/route.ts`
+Important caveat:
 
-This route shows how availability rules, time off blocks, and existing appointments are assembled before calling the engine.
+- the time-off form uses `datetime-local` and currently reflects the user’s device timezone, not an explicit barber-timezone picker
 
-### `app/api/public/[slug]/book/route.ts`
+### Calendar
 
-This is the current public booking endpoint the UI actually calls.
+Current state:
 
-### `app/api/services/*` and `app/api/availability/*`
+- upcoming and historical appointments are listed
+- `BOOKED` appointments can be:
+  - cancelled if future
+  - marked completed if past
+  - marked no-show if past
 
-These are the main authenticated CRUD examples in the app. If you need a pattern for new protected APIs, these routes are the best reference.
+Missing:
 
-## Brittle areas and gaps
+- reschedule flow
+- manual appointment creation
+- richer calendar interactions
 
-These are the places I would treat carefully as a new contributor.
+### Clients
 
-### Timezone handling is the biggest risk
+Current state:
 
-Availability rules are stored as local clock strings like `09:00`, and the `Barber` model also stores a timezone. But the scheduling engine and slot route currently build and compare windows against UTC dates and UTC midnight.
+- list clients
+- open client profile
+- review appointment history
+- append notes
 
-Consequences:
+Important caveat:
 
-- slot generation does not actually apply the barber timezone
-- public booking dates are interpreted as `YYYY-MM-DDT00:00:00.000Z`
-- displayed slot times depend on the browser locale, not the barber timezone
-- DST and non-UTC barbers are likely wrong
+- notes are stored as a single timestamped text blob on the `Client` record
+- there is no edit/delete note flow
+- client merge/deduping is still heuristic, not a full identity system
 
-This affects `lib/utils/time.ts`, `lib/scheduling/engine.ts`, and `app/api/public/[slug]/slots/route.ts`.
+### Analytics
 
-### Booking creation is shared, but there are still two public entry points
+Current MVP analytics are intentionally basic:
 
-There are two booking creation routes:
+- upcoming appointment count
+- total clients
+- completed appointment count
 
-- `app/api/appointments/route.ts`
-- `app/api/public/[slug]/book/route.ts`
+There is no revenue in dashboard or analytics UI anymore.
 
-They now delegate to the same shared booking logic and return the same payload shape, and the Playwright spec mocks the live public endpoint again.
+### Payments
 
-That reduces drift, but it still means future booking changes should update both entry points intentionally rather than letting one become a hidden fork.
+Current behavior:
 
-### Payments are mostly schema-level right now
+- sidebar entry is removed
+- `/payments` exists but shows a gated MVP message
+- Stripe and `Payment` model code remain in the repo
 
-The schema, page, and Stripe webhook route exist, but there is no code creating `Payment` rows and the Stripe webhook handler does not persist anything yet.
+Treat payments as preserved scaffolding, not as active product functionality.
 
-Effects:
+## Notifications And Integrations
 
-- `payments` page may stay empty forever unless rows are inserted elsewhere
-- analytics revenue stays zero unless payments are manually created
-- `stripePaymentIntentId` is unused
+### Email / SMS
 
-### Reminders are recorded but not orchestrated
+`lib/email/resend.ts` and `lib/messaging/twilio.ts` are intentionally soft-failing wrappers:
 
-Booking creation inserts `Reminder` rows, and there is a Trigger.dev task for sending reminders, but nothing currently schedules or dispatches that task from the booking flow.
+- if the required env vars are missing, they return without throwing
+- local development can therefore work without configured providers
 
-Also note that booking confirmation messages are sent immediately from the request path through Twilio/Resend, while reminder rows are only persisted.
+### Reminder Rows
 
-### Time off exists in the model but not in the product
+Booking writes create `Reminder` rows 24 hours before an appointment.
 
-`TimeOffBlock` is part of the schema and slot generation path, but there is no dashboard UI or CRUD API for barbers to manage it.
+What does not exist yet:
 
-That means the engine supports a feature the product cannot realistically use yet.
+- a dispatcher that picks up pending reminders
+- status transitions from `PENDING` to `SENT` / `FAILED` in a real job pipeline
 
-### Client deduping is safer, not solved
+### Webhooks
 
-`findOrCreateClient()` no longer blindly overwrites a matched client. It only merges when the existing record is compatible with the incoming contact data, and it refuses ambiguous merges.
+Current state:
 
-That is better for an MVP, but there are still limits:
+- Clerk webhook verifies signatures, then does nothing
+- Stripe webhook verifies signatures, then does nothing with events
 
-- family members share a phone number
-- a client reuses an email for someone else
-- duplicate client rows already exist for the same real person
-- there is still no explicit identity resolution or merge workflow
+## Current Known Issues
 
-### Client notes are stored as a single blob
+### Booking write path regression
 
-Notes are appended into `Client.notes` as timestamped text instead of a separate note table.
+`lib/scheduling/appointments.ts` currently needs attention.
 
-That makes editing, searching, auditing, and concurrent note updates awkward.
+Symptoms:
 
-### Clerk webhook is a stub
+- booking validation tests import symbols that no longer exist
+- guardrail tests fail against the current time-off query behavior
+- the transaction body references data that is not defined consistently
 
-`app/api/webhooks/clerk/route.ts` verifies the signature but does not synchronize anything into Prisma.
+If you need one “fix this first” target, this is it.
 
-Today, the real source of truth is lazy creation from `getOrCreateCurrentBarber()`, not webhook-driven provisioning.
+### Mocked Playwright booking test
 
-### Slug creation is retried, but bootstrap still depends on lazy creation
+`tests/e2e/booking-flow.spec.ts` now targets the right public booking route, but it still intercepts and fulfills requests with mocks.
 
-`getOrCreateCurrentBarber()` now retries when a concurrent first-login request wins the slug race, and it also re-reads by `clerkUserId` if another request created the barber first.
+That means:
 
-That closes the obvious unique-constraint race, but the broader onboarding story is still lazy request-time provisioning instead of a dedicated signup flow or webhook-driven sync.
+- it does not prove Prisma writes work
+- it does not prove reminder records or confirmations behave correctly
+- it does not catch regressions inside `createAppointment()`
 
-## How to work safely in this codebase
+### Legacy / preserved code
 
-- If you change scheduling behavior, update `tests/unit/slot-generation.test.ts`, `tests/unit/barber-availability.test.ts`, and `tests/unit/appointment-conflicts.test.ts`.
-- If you touch booking endpoints, update the Playwright spec at `tests/e2e/booking-flow.spec.ts`.
-- If you implement payments, wire all three layers together: payment creation, webhook persistence, and analytics queries.
-- If you implement reminders, decide whether the source of truth is the `Reminder` table, immediate request-time sends, or Trigger.dev jobs. The code currently mixes these ideas.
-- Treat `timezone` as unfinished until slot generation and display are explicitly timezone-aware.
+These areas still exist in the repo but should not be treated as current MVP features:
 
-## Current verification status
+- `Payment` model + Stripe client helper
+- Stripe webhook logic
+- gated `/payments` page
+- unused `components/forms/service-manager.tsx`
 
-I reran the unit suite with `npm test`; all 23 unit tests passed.
+## Safe Starting Points
 
-I also reran the public booking Playwright spec with `npm run test:e2e -- tests/e2e/booking-flow.spec.ts`; it passed after updating the mock to the live public booking endpoint.
+If you are new to the repo, start here in order:
+
+1. `docs/current-state.md`
+2. `prisma/schema.prisma`
+3. `lib/auth/current-barber.ts`
+4. `lib/utils/time.ts`
+5. `lib/scheduling/engine.ts`
+6. `lib/scheduling/appointments.ts`
+7. `lib/bookings/create-booking.ts`
+8. `components/booking/public-booking-form.tsx`
+9. `app/(dashboard)/settings/availability/page.tsx`
+
+## Rules Of Thumb For Changes
+
+- If you touch booking logic, update unit tests first and verify the real write path.
+- If you touch time or scheduling, inspect both `lib/utils/time.ts` and `lib/scheduling/engine.ts`.
+- If you touch public booking, prefer `/api/public/[slug]/book`.
+- Do not revive `/api/appointments` as a parallel booking write path without a clear reason.
+- If you implement payments, do it end-to-end:
+  - payment creation
+  - webhook persistence
+  - UI/reporting surfaces
+- If you implement reminders, decide whether the `Reminder` table or a direct job pipeline is the source of truth.
+
+## Bottom Line
+
+This project is no longer a vague scaffold. It has a real dashboard surface, real scheduling models, real CRUD for services and weekly availability, real time-off records, and basic client/calendar operations.
+
+The main gap is reliability at the booking write layer, not a lack of overall product shape. Fix that first, then use the rest of the repo as a solid base for the next iteration.

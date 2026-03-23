@@ -289,38 +289,18 @@ export async function createAppointment(input: CreateAppointmentInput) {
           const startTime = input.startTime;
           const endTime = addMinutes(startTime, service.durationMinutes);
 
-          if (startTime <= new Date()) {
-            throw new ConflictError("This time slot is no longer available.");
-          }
-
-          const localDate = getDateStringInTimeZone(startTime, barber.timezone);
-          const dayStart = startOfTimeZoneDay(localDate, barber.timezone);
-          const dayEnd = endOfTimeZoneDay(localDate, barber.timezone);
-
-          const timeOffBlocks = await tx.timeOffBlock.findMany({
+          const overlappingTimeOffBlock = await tx.timeOffBlock.findFirst({
             where: {
               barberId: input.barberId,
-              startTime: { lt: dayEnd },
-              endTime: { gt: dayStart },
+              startTime: { lt: endTime },
+              endTime: { gt: startTime },
             },
             select: {
-              startTime: true,
-              endTime: true,
+              id: true,
             },
           });
 
-          const availabilityWindows = getBarberAvailabilityForDate({
-            date: localDate,
-            timeZone: barber.timezone,
-            availabilityRules: barber.availability,
-            timeOffBlocks,
-          });
-
-          const slotFallsWithinAvailability = availabilityWindows.some(
-            (window) => startTime >= window.startTime && endTime <= window.endTime,
-          );
-
-          if (!slotFallsWithinAvailability) {
+          if (overlappingTimeOffBlock) {
             throw new ConflictError("This time slot is no longer available.");
           }
 

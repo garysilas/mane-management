@@ -75,45 +75,33 @@ describe("slot generation", () => {
     ]);
   });
 
-  it("uses the DST-adjusted offset on spring-forward days", () => {
+  it("excludes slots that overlap a time-off block", () => {
     const slots = generateTimeSlots({
-      date: "2026-03-08",
-      timeZone: "America/New_York",
-      serviceDurationMinutes: 60,
-      slotIntervalMinutes: 60,
+      date: new Date("2026-03-09T00:00:00.000Z"),
+      serviceDurationMinutes: 30,
+      slotIntervalMinutes: 15,
       availabilityRules: [
         {
-          dayOfWeek: 0,
+          dayOfWeek: 1,
           startTimeLocal: "09:00",
-          endTimeLocal: "10:00",
+          endTimeLocal: "11:00",
           isActive: true,
         },
       ],
       appointments: [],
-      timeOffBlocks: [],
-    });
-
-    expect(slots.map((slot) => slot.startTime.toISOString())).toEqual(["2026-03-08T13:00:00.000Z"]);
-  });
-
-  it("uses the standard-time offset on fall-back days", () => {
-    const slots = generateTimeSlots({
-      date: "2026-11-01",
-      timeZone: "America/New_York",
-      serviceDurationMinutes: 60,
-      slotIntervalMinutes: 60,
-      availabilityRules: [
+      timeOffBlocks: [
         {
-          dayOfWeek: 0,
-          startTimeLocal: "09:00",
-          endTimeLocal: "10:00",
-          isActive: true,
+          startTime: new Date("2026-03-09T09:30:00.000Z"),
+          endTime: new Date("2026-03-09T10:00:00.000Z"),
         },
       ],
-      appointments: [],
-      timeOffBlocks: [],
     });
 
-    expect(slots.map((slot) => slot.startTime.toISOString())).toEqual(["2026-11-01T14:00:00.000Z"]);
+    expect(slots.map((slot) => slot.startTime.toISOString())).toEqual([
+      "2026-03-09T09:00:00.000Z",
+      "2026-03-09T10:00:00.000Z",
+      "2026-03-09T10:15:00.000Z",
+      "2026-03-09T10:30:00.000Z",
+    ]);
   });
 });

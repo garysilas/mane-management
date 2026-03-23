@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { sendBookingEmail } from "@/lib/email/resend";
 import { sendSmsReminder } from "@/lib/messaging/twilio";
 import { createAppointment } from "@/lib/scheduling/appointments";
+import { formatDateTimeInTimeZone } from "@/lib/utils/time";
 import { ConflictError, NotFoundError } from "@/lib/utils/errors";
 import type { PublicBookingInput } from "@/lib/validators/booking";
 
@@ -9,6 +10,7 @@ export type BookingBarber = {
   id: string;
   name: string;
   businessName: string | null;
+  timezone: string;
 };
 
 type BookingLookupInput = {
@@ -23,6 +25,7 @@ export async function findBookingBarberBySlug(slug: string): Promise<BookingBarb
       id: true,
       name: true,
       businessName: true,
+      timezone: true,
     },
   });
 }
@@ -35,6 +38,7 @@ export async function findBookingBarberByIdOrSlug(input: BookingLookupInput): Pr
         id: true,
         name: true,
         businessName: true,
+        timezone: true,
       },
     });
   }
@@ -68,7 +72,7 @@ export async function createConfirmedBooking(barber: BookingBarber, input: Publi
       sendBookingEmail({
         to: input.email,
         subject: `Booking confirmed with ${businessName}`,
-        html: `<p>Your appointment is booked for ${appointment.startTime.toISOString()}.</p>`,
+        html: `<p>Your appointment is booked for ${formatDateTimeInTimeZone(appointment.startTime, barber.timezone)} (${barber.timezone}).</p>`,
       }),
     );
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { generateTimeSlots } from "@/lib/scheduling";
+import { endOfTimeZoneDay, startOfTimeZoneDay } from "@/lib/utils/time";
 import { slotQuerySchema } from "@/lib/validators/booking";
 
 type RouteProps = {
@@ -21,13 +22,11 @@ export async function GET(request: Request, { params }: RouteProps) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid slot query." }, { status: 400 });
   }
 
-  const dayStart = new Date(`${parsed.data.date}T00:00:00.000Z`);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-
   const barber = await prisma.barber.findUnique({
     where: { slug },
     select: {
       id: true,
+      timezone: true,
       availability: {
         where: { isActive: true },
         select: {
@@ -37,19 +36,15 @@ export async function GET(request: Request, { params }: RouteProps) {
           isActive: true,
         },
       },
-      timeOffBlocks: {
-        where: {
-          startTime: { lt: dayEnd },
-          endTime: { gt: dayStart },
-        },
-        select: { startTime: true, endTime: true },
-      },
     },
   });
 
   if (!barber) {
     return NextResponse.json({ error: "Barber not found." }, { status: 404 });
   }
+
+  const dayStart = startOfTimeZoneDay(parsed.data.date, barber.timezone);
+  const dayEnd = endOfTimeZoneDay(parsed.data.date, barber.timezone);
 
   const service = await prisma.service.findFirst({
     where: {
@@ -63,6 +58,18 @@ export async function GET(request: Request, { params }: RouteProps) {
   if (!service) {
     return NextResponse.json({ error: "Service not found." }, { status: 404 });
   }
+
+  const timeOffBlocks = await prisma.timeOffBlock.findMany({
+    where: {
+      barberId: barber.id,
+      startTime: { lt: dayEnd },
+      endTime: { gt: dayStart },
+    },
+    select: {
+      startTime: true,
+      endTime: true,
+    },
+  });
 
   const appointments = await prisma.appointment.findMany({
     where: {
@@ -78,11 +85,12 @@ export async function GET(request: Request, { params }: RouteProps) {
   });
 
   const slots = generateTimeSlots({
-    date: dayStart,
+    date: parsed.data.date,
+    timeZone: barber.timezone,
     serviceDurationMinutes: service.durationMinutes,
     availabilityRules: barber.availability,
     appointments,
-    timeOffBlocks: barber.timeOffBlocks,
+    timeOffBlocks,
     slotIntervalMinutes: 15,
   });
 

@@ -1,6 +1,15 @@
 import { AppointmentStatus } from "@prisma/client";
 
-import { addMinutes, combineUtcDateAndMinutes, parseTimeToMinutes, startOfUtcDay } from "@/lib/utils/time";
+import {
+  addMinutes,
+  combineLocalDateAndMinutes,
+  endOfTimeZoneDay,
+  getDateStringInTimeZone,
+  getDayOfWeekFromDateString,
+  getMinutesFromTimeZoneMidnight,
+  parseTimeToMinutes,
+  startOfTimeZoneDay,
+} from "@/lib/utils/time";
 
 export type AvailabilityRuleInput = {
   dayOfWeek: number;
@@ -31,14 +40,16 @@ type GenerateTimeSlotsInput = {
   serviceDurationMinutes?: number;
   serviceDuration?: number;
   slotDurationMinutes?: number;
-  date: Date;
+  date: Date | string;
+  timeZone?: string;
   slotIntervalMinutes?: number;
   slotInterval?: number;
   timeOffBlocks?: TimeOffWindow[];
 };
 
 type GetAvailabilityInput = {
-  date: Date;
+  date: Date | string;
+  timeZone?: string;
   availabilityRules?: AvailabilityRuleInput[];
   weeklyAvailabilityRules?: AvailabilityRuleInput[];
   rules?: AvailabilityRuleInput[];
@@ -121,10 +132,6 @@ function clampToDay(window: TimeWindow, dayStart: Date, dayEnd: Date): TimeWindo
   return { startTime, endTime };
 }
 
-function getMinutesFromUtcMidnight(date: Date): number {
-  return date.getUTCHours() * 60 + date.getUTCMinutes();
-}
-
 function roundUpToInterval(minutes: number, intervalMinutes: number): number {
   if (intervalMinutes <= 0) {
     return minutes;
@@ -185,13 +192,19 @@ export function isTimeSlotAvailable(
   });
 }
 
+function resolveLocalDate(date: Date | string, timeZone: string): string {
+  return typeof date === "string" ? date : getDateStringInTimeZone(date, timeZone);
+}
+
 export function getBarberAvailabilityForDate(params: GetAvailabilityInput): TimeWindow[] {
   const { date } = params;
+  const timeZone = params.timeZone ?? "UTC";
   const availabilityRules = params.availabilityRules ?? params.weeklyAvailabilityRules ?? params.rules ?? [];
   const timeOffBlocks = params.timeOffBlocks ?? [];
-  const dayOfWeek = date.getUTCDay();
-  const dayStart = startOfUtcDay(date);
-  const dayEnd = addMinutes(dayStart, 24 * 60);
+  const localDate = resolveLocalDate(date, timeZone);
+  const dayOfWeek = getDayOfWeekFromDateString(localDate);
+  const dayStart = startOfTimeZoneDay(localDate, timeZone);
+  const dayEnd = endOfTimeZoneDay(localDate, timeZone);
 
   const dailyAvailability = availabilityRules
     .filter((rule) => rule.isActive && rule.dayOfWeek === dayOfWeek)
@@ -200,8 +213,8 @@ export function getBarberAvailabilityForDate(params: GetAvailabilityInput): Time
       const endMinutes = parseTimeToMinutes(rule.endTimeLocal);
 
       return {
-        startTime: combineUtcDateAndMinutes(date, startMinutes),
-        endTime: combineUtcDateAndMinutes(date, endMinutes),
+        startTime: combineLocalDateAndMinutes(localDate, startMinutes, timeZone),
+        endTime: combineLocalDateAndMinutes(localDate, endMinutes, timeZone),
       };
     })
     .filter(isValidWindow);
@@ -243,19 +256,22 @@ export function getBarberAvailabilityForDate(params: GetAvailabilityInput): Time
 
 export function generateTimeSlots(params: GenerateTimeSlotsInput): GeneratedSlot[] {
   const { date } = params;
+  const timeZone = params.timeZone ?? "UTC";
   const availabilityRules = params.availabilityRules ?? params.weeklyAvailabilityRules ?? params.rules ?? [];
   const appointments = params.appointments ?? params.existingAppointments ?? [];
   const serviceDurationMinutes =
     params.serviceDurationMinutes ?? params.serviceDuration ?? params.slotDurationMinutes ?? 0;
   const slotIntervalMinutes = params.slotIntervalMinutes ?? params.slotInterval ?? 15;
   const timeOffBlocks = params.timeOffBlocks ?? [];
+  const localDate = resolveLocalDate(date, timeZone);
 
   if (serviceDurationMinutes <= 0 || slotIntervalMinutes <= 0) {
     return [];
   }
 
   const availabilityWindows = getBarberAvailabilityForDate({
-    date,
+    date: localDate,
+    timeZone,
     availabilityRules,
     timeOffBlocks,
   });
@@ -263,15 +279,18 @@ export function generateTimeSlots(params: GenerateTimeSlotsInput): GeneratedSlot
   const slots: GeneratedSlot[] = [];
 
   for (const availabilityWindow of availabilityWindows) {
-    const startMinutes = roundUpToInterval(getMinutesFromUtcMidnight(availabilityWindow.startTime), slotIntervalMinutes);
-    const endMinutes = getMinutesFromUtcMidnight(availabilityWindow.endTime);
+    const startMinutes = roundUpToInterval(
+      getMinutesFromTimeZoneMidnight(availabilityWindow.startTime, timeZone),
+      slotIntervalMinutes,
+    );
+    const endMinutes = getMinutesFromTimeZoneMidnight(availabilityWindow.endTime, timeZone);
 
     for (
       let slotStartMinutes = startMinutes;
       slotStartMinutes + serviceDurationMinutes <= endMinutes;
       slotStartMinutes += slotIntervalMinutes
     ) {
-      const slotStartTime = combineUtcDateAndMinutes(date, slotStartMinutes);
+      const slotStartTime = combineLocalDateAndMinutes(localDate, slotStartMinutes, timeZone);
       const slotEndTime = addMinutes(slotStartTime, serviceDurationMinutes);
 
       if (

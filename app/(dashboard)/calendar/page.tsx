@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppointmentStatus } from "@prisma/client";
 
+import { AppointmentStatusActions } from "@/components/forms/appointment-status-actions";
 import { getOrCreateCurrentBarber } from "@/lib/auth/current-barber";
 import { prisma } from "@/lib/db/prisma";
 
@@ -88,11 +89,13 @@ export default async function CalendarPage() {
       title: "Upcoming Appointments",
       emptyState: "No upcoming appointments.",
       items: upcomingAppointments,
+      actionStatuses: [AppointmentStatus.CANCELLED] as const,
     },
     {
       title: "Appointment History",
       emptyState: "No appointment history yet.",
       items: appointmentHistory,
+      actionStatuses: [AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW] as const,
     },
   ];
 
@@ -119,11 +122,19 @@ export default async function CalendarPage() {
                       <p className="text-sm text-zinc-600">{appointment.service.name}</p>
                       <p className="text-sm text-zinc-600">{formatAppointmentTime(appointment.startTime, barber.timezone)}</p>
                     </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${statusStyles[appointment.status]}`}
-                    >
-                      {appointment.status.replace("_", " ")}
-                    </span>
+                    <div className="flex flex-col items-start gap-2 sm:items-end">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${statusStyles[appointment.status]}`}
+                      >
+                        {appointment.status.replace("_", " ")}
+                      </span>
+                      {appointment.status === AppointmentStatus.BOOKED ? (
+                        <AppointmentStatusActions
+                          appointmentId={appointment.id}
+                          availableStatuses={section.actionStatuses}
+                        />
+                      ) : null}
+                    </div>
                   </div>
                 </li>
               ))}

@@ -38,6 +38,27 @@ export type BookingClientInput = CreateAppointmentInput["client"];
 
 const MAX_TRANSACTION_RETRIES = 2;
 
+export type AppointmentLifecycleStatus =
+  | AppointmentStatus.CANCELLED
+  | AppointmentStatus.COMPLETED
+  | AppointmentStatus.NO_SHOW;
+
+export function canTransitionAppointmentStatus(
+  currentStatus: AppointmentStatus,
+  nextStatus: AppointmentStatus,
+): nextStatus is AppointmentLifecycleStatus {
+  return (
+    currentStatus === AppointmentStatus.BOOKED &&
+    (nextStatus === AppointmentStatus.CANCELLED ||
+      nextStatus === AppointmentStatus.COMPLETED ||
+      nextStatus === AppointmentStatus.NO_SHOW)
+  );
+}
+
+function requiresPastAppointmentForStatus(status: AppointmentLifecycleStatus): boolean {
+  return status === AppointmentStatus.COMPLETED || status === AppointmentStatus.NO_SHOW;
+}
+
 function normalizeOptionalText(value?: string | null): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -191,6 +212,56 @@ async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateApp
       notes,
     },
   });
+}
+
+export async function updateAppointmentStatus(input: {
+  appointmentId: string;
+  barberId: string;
+  status: AppointmentLifecycleStatus;
+}) {
+  const now = new Date();
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      id: input.appointmentId,
+      barberId: input.barberId,
+    },
+    select: {
+      id: true,
+      startTime: true,
+      status: true,
+    },
+  });
+
+  if (!appointment) {
+    throw new NotFoundError("Appointment not found.");
+  }
+
+  if (!canTransitionAppointmentStatus(appointment.status, input.status)) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
+  }
+
+  if (requiresPastAppointmentForStatus(input.status) && appointment.startTime >= now) {
+    throw new ConflictError("Only past appointments can be marked as completed or no show.");
+  }
+
+  const result = await prisma.appointment.updateMany({
+    where: {
+      id: appointment.id,
+      barberId: input.barberId,
+      status: AppointmentStatus.BOOKED,
+      ...(requiresPastAppointmentForStatus(input.status) ? { startTime: { lt: now } } : {}),
+    },
+    data: { status: input.status },
+  });
+
+  if (result.count !== 1) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
+  }
+
+  return {
+    id: appointment.id,
+    status: input.status,
+  };
 }
 
 export async function createAppointment(input: CreateAppointmentInput) {

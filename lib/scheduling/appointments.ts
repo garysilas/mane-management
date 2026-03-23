@@ -38,12 +38,26 @@ export type BookingClientInput = CreateAppointmentInput["client"];
 
 const MAX_TRANSACTION_RETRIES = 2;
 
-export const BOOKING_VALIDATION_ERRORS = {
-  past: "Bookings must be scheduled in the future.",
-  outsideAvailability: "This time is outside the barber's availability.",
-  timeOffConflict: "This time is blocked off and cannot be booked.",
-  overlap: "This time slot is no longer available.",
-} as const;
+export type AppointmentLifecycleStatus =
+  | AppointmentStatus.CANCELLED
+  | AppointmentStatus.COMPLETED
+  | AppointmentStatus.NO_SHOW;
+
+export function canTransitionAppointmentStatus(
+  currentStatus: AppointmentStatus,
+  nextStatus: AppointmentStatus,
+): nextStatus is AppointmentLifecycleStatus {
+  return (
+    currentStatus === AppointmentStatus.BOOKED &&
+    (nextStatus === AppointmentStatus.CANCELLED ||
+      nextStatus === AppointmentStatus.COMPLETED ||
+      nextStatus === AppointmentStatus.NO_SHOW)
+  );
+}
+
+function requiresPastAppointmentForStatus(status: AppointmentLifecycleStatus): boolean {
+  return status === AppointmentStatus.COMPLETED || status === AppointmentStatus.NO_SHOW;
+}
 
 function normalizeOptionalText(value?: string | null): string | null {
   const trimmed = value?.trim();
@@ -200,52 +214,54 @@ async function findOrCreateClient(tx: Prisma.TransactionClient, input: CreateApp
   });
 }
 
-export function getBookingValidationError(params: {
-  proposedStartTime: Date;
-  proposedEndTime: Date;
-  availabilityRules?: AvailabilityRuleInput[];
-  timeOffBlocks?: TimeOffWindow[];
-  appointments?: AppointmentWindow[];
-  now?: Date;
-}): string | null {
-  const now = params.now ?? new Date();
-
-  if (params.proposedStartTime <= now) {
-    return BOOKING_VALIDATION_ERRORS.past;
-  }
-
-  const availabilityWindows = getBarberAvailabilityForDate({
-    date: params.proposedStartTime,
-    availabilityRules: params.availabilityRules ?? [],
+export async function updateAppointmentStatus(input: {
+  appointmentId: string;
+  barberId: string;
+  status: AppointmentLifecycleStatus;
+}) {
+  const now = new Date();
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      id: input.appointmentId,
+      barberId: input.barberId,
+    },
+    select: {
+      id: true,
+      startTime: true,
+      status: true,
+    },
   });
 
-  const isWithinAvailability = availabilityWindows.some(
-    (window) => window.startTime <= params.proposedStartTime && window.endTime >= params.proposedEndTime,
-  );
-
-  if (!isWithinAvailability) {
-    return BOOKING_VALIDATION_ERRORS.outsideAvailability;
+  if (!appointment) {
+    throw new NotFoundError("Appointment not found.");
   }
 
-  const hasTimeOffConflict = (params.timeOffBlocks ?? []).some((block) =>
-    overlaps(block.startTime, block.endTime, params.proposedStartTime, params.proposedEndTime),
-  );
-
-  if (hasTimeOffConflict) {
-    return BOOKING_VALIDATION_ERRORS.timeOffConflict;
+  if (!canTransitionAppointmentStatus(appointment.status, input.status)) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
   }
 
-  const slotIsAvailable = isTimeSlotAvailable({
-    proposedStartTime: params.proposedStartTime,
-    proposedEndTime: params.proposedEndTime,
-    appointments: params.appointments ?? [],
+  if (requiresPastAppointmentForStatus(input.status) && appointment.startTime >= now) {
+    throw new ConflictError("Only past appointments can be marked as completed or no show.");
+  }
+
+  const result = await prisma.appointment.updateMany({
+    where: {
+      id: appointment.id,
+      barberId: input.barberId,
+      status: AppointmentStatus.BOOKED,
+      ...(requiresPastAppointmentForStatus(input.status) ? { startTime: { lt: now } } : {}),
+    },
+    data: { status: input.status },
   });
 
-  if (!slotIsAvailable) {
-    return BOOKING_VALIDATION_ERRORS.overlap;
+  if (result.count !== 1) {
+    throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
   }
 
-  return null;
+  return {
+    id: appointment.id,
+    status: input.status,
+  };
 }
 
 export async function createAppointment(input: CreateAppointmentInput) {

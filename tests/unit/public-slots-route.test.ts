@@ -36,10 +36,10 @@ describe("public slots route", () => {
     vi.clearAllMocks();
   });
 
-  it("queries barber-local day windows before loading time off and appointments", async () => {
+  it("queries barber-local day windows using the stored barber timezone", async () => {
     mocks.barberFindUnique.mockResolvedValue({
       id: "barber-1",
-      timezone: "America/New_York",
+      timezone: "America/Los_Angeles",
       availability: [
         {
           dayOfWeek: 0,
@@ -95,8 +95,8 @@ describe("public slots route", () => {
     expect(mocks.timeOffBlockFindMany).toHaveBeenCalledWith({
       where: {
         barberId: "barber-1",
-        startTime: { lt: new Date("2026-03-09T04:00:00.000Z") },
-        endTime: { gt: new Date("2026-03-08T05:00:00.000Z") },
+        startTime: { lt: new Date("2026-03-09T07:00:00.000Z") },
+        endTime: { gt: new Date("2026-03-08T08:00:00.000Z") },
       },
       select: {
         startTime: true,
@@ -107,8 +107,8 @@ describe("public slots route", () => {
     expect(mocks.appointmentFindMany).toHaveBeenCalledWith({
       where: {
         barberId: "barber-1",
-        startTime: { lt: new Date("2026-03-09T04:00:00.000Z") },
-        endTime: { gt: new Date("2026-03-08T05:00:00.000Z") },
+        startTime: { lt: new Date("2026-03-09T07:00:00.000Z") },
+        endTime: { gt: new Date("2026-03-08T08:00:00.000Z") },
       },
       select: {
         startTime: true,
@@ -119,7 +119,7 @@ describe("public slots route", () => {
 
     expect(mocks.generateTimeSlots).toHaveBeenCalledWith({
       date: "2026-03-08",
-      timeZone: "America/New_York",
+      timeZone: "America/Los_Angeles",
       serviceDurationMinutes: 30,
       availabilityRules: [
         {

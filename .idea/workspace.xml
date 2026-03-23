@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ede0bb59-b8fc-400d-b173-bc844ca87f98" name="Changes" comment="" />
+    <list default="true" id="ede0bb59-b8fc-400d-b173-bc844ca87f98" name="Changes" comment="Fix XML encoding in workspace configuration" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -232,7 +232,9 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Enhance client deduplication and booking process with safer merge rules" />
     <MESSAGE value="Implement timezone-aware scheduling and availability checks" />
-    <option name="LAST_COMMIT_MESSAGE" value="Implement timezone-aware scheduling and availability checks" />
+    <MESSAGE value="Implement time-off management API and UI for creating, updating, and deleting time-off blocks" />
+    <MESSAGE value="Fix XML encoding in workspace configuration" />
+    <option name="LAST_COMMIT_MESSAGE" value="Fix XML encoding in workspace configuration" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>

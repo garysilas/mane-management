@@ -1,9 +1,10 @@
-import { AppointmentStatus } from "@prisma/client";
+import { AppointmentStatus, ReminderStatus } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findFirstMock, updateManyMock } = vi.hoisted(() => ({
+const { findFirstMock, updateManyMock, reminderUpdateManyMock } = vi.hoisted(() => ({
   findFirstMock: vi.fn(),
   updateManyMock: vi.fn(),
+  reminderUpdateManyMock: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -11,6 +12,9 @@ vi.mock("@/lib/db/prisma", () => ({
     appointment: {
       findFirst: findFirstMock,
       updateMany: updateManyMock,
+    },
+    reminder: {
+      updateMany: reminderUpdateManyMock,
     },
   },
 }));
@@ -24,6 +28,7 @@ describe("appointment status updates", () => {
     vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
     findFirstMock.mockReset();
     updateManyMock.mockReset();
+    reminderUpdateManyMock.mockReset();
   });
 
   afterEach(() => {
@@ -59,6 +64,15 @@ describe("appointment status updates", () => {
         status: AppointmentStatus.CANCELLED,
       },
     });
+    expect(reminderUpdateManyMock).toHaveBeenCalledWith({
+      where: {
+        appointmentId: "appt_123",
+        status: ReminderStatus.PENDING,
+      },
+      data: {
+        status: ReminderStatus.CANCELLED,
+      },
+    });
   });
 
   it("allows marking a past booked appointment completed", async () => {
@@ -91,6 +105,7 @@ describe("appointment status updates", () => {
         status: AppointmentStatus.COMPLETED,
       },
     });
+    expect(reminderUpdateManyMock).not.toHaveBeenCalled();
   });
 
   it("allows marking a past booked appointment as no show", async () => {

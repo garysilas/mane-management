@@ -258,6 +258,18 @@ export async function updateAppointmentStatus(input: {
     throw new ConflictError("Only booked appointments can be marked as cancelled, completed, or no show.");
   }
 
+  if (input.status === AppointmentStatus.CANCELLED) {
+    await prisma.reminder.updateMany({
+      where: {
+        appointmentId: appointment.id,
+        status: ReminderStatus.PENDING,
+      },
+      data: {
+        status: ReminderStatus.CANCELLED,
+      },
+    });
+  }
+
   return {
     id: appointment.id,
     status: input.status,

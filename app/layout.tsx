@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Mane Manager",
-  description: "Barber-first booking, scheduling, payments, and client management.",
+  description: "Barber-first booking, scheduling, and client management.",
 };
 
 export default function RootLayout({

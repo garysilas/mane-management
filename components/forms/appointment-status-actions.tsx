@@ -4,7 +4,7 @@ import { AppointmentStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type ActionStatus = AppointmentStatus.CANCELLED | AppointmentStatus.COMPLETED | AppointmentStatus.NO_SHOW;
+type ActionStatus = Extract<AppointmentStatus, "CANCELLED" | "COMPLETED" | "NO_SHOW">;
 
 type Props = {
   appointmentId: string;

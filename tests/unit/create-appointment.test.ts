@@ -2,7 +2,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   findBarber: vi.fn(),
   findService: vi.fn(),
-  findTimeOffBlock: vi.fn(),
+  findTimeOffBlocks: vi.fn(),
   findAppointments: vi.fn(),
   findClients: vi.fn(),
   updateClient: vi.fn(),
@@ -25,10 +25,23 @@ import { ConflictError } from "@/lib/utils/errors";
 describe("create appointment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-11T14:00:00.000Z"));
 
-    mocks.findBarber.mockResolvedValue({ id: "barber-1" });
+    mocks.findBarber.mockResolvedValue({
+      id: "barber-1",
+      timezone: "America/New_York",
+      availability: [
+        {
+          dayOfWeek: 3,
+          startTimeLocal: "09:00",
+          endTimeLocal: "17:00",
+          isActive: true,
+        },
+      ],
+    });
     mocks.findService.mockResolvedValue({ id: "service-1", durationMinutes: 30 });
-    mocks.findTimeOffBlock.mockResolvedValue(null);
+    mocks.findTimeOffBlocks.mockResolvedValue([]);
     mocks.findAppointments.mockResolvedValue([]);
     mocks.findClients.mockResolvedValue([]);
     mocks.updateClient.mockResolvedValue(null);
@@ -45,7 +58,7 @@ describe("create appointment", () => {
           findFirst: mocks.findService,
         },
         timeOffBlock: {
-          findFirst: mocks.findTimeOffBlock,
+          findMany: mocks.findTimeOffBlocks,
         },
         appointment: {
           findMany: mocks.findAppointments,
@@ -63,8 +76,17 @@ describe("create appointment", () => {
     );
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("rejects bookings that overlap a time-off block", async () => {
-    mocks.findTimeOffBlock.mockResolvedValue({ id: "block-1" });
+    mocks.findTimeOffBlocks.mockResolvedValue([
+      {
+        startTime: new Date("2026-03-11T15:00:00.000Z"),
+        endTime: new Date("2026-03-11T15:30:00.000Z"),
+      },
+    ]);
 
     await expect(
       createAppointment({
@@ -80,14 +102,15 @@ describe("create appointment", () => {
       }),
     ).rejects.toThrow(ConflictError);
 
-    expect(mocks.findTimeOffBlock).toHaveBeenCalledWith({
+    expect(mocks.findTimeOffBlocks).toHaveBeenCalledWith({
       where: {
         barberId: "barber-1",
-        startTime: { lt: new Date("2026-03-11T15:30:00.000Z") },
-        endTime: { gt: new Date("2026-03-11T15:00:00.000Z") },
+        startTime: { lt: new Date("2026-03-12T04:00:00.000Z") },
+        endTime: { gt: new Date("2026-03-11T04:00:00.000Z") },
       },
       select: {
-        id: true,
+        startTime: true,
+        endTime: true,
       },
     });
     expect(mocks.findAppointments).not.toHaveBeenCalled();

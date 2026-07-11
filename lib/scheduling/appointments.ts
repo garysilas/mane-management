@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
-import { getBarberAvailabilityForDate, isTimeSlotAvailable } from "@/lib/scheduling/engine";
+import { getBarberAvailabilityForDate, isTimeSlotAvailable, overlaps } from "@/lib/scheduling/engine";
 import { ConflictError, NotFoundError } from "@/lib/utils/errors";
 import { addMinutes, endOfTimeZoneDay, getDateStringInTimeZone, startOfTimeZoneDay } from "@/lib/utils/time";
 
@@ -26,6 +26,35 @@ type CreateAppointmentInput = {
   };
 };
 
+export const BOOKING_VALIDATION_ERRORS = {
+  past: "This time slot is no longer available.",
+  outsideAvailability: "This time slot is no longer available.",
+  timeOffConflict: "This time slot is no longer available.",
+  overlap: "This time slot is no longer available.",
+} as const;
+
+type BookingValidationInput = {
+  proposedStartTime: Date;
+  proposedEndTime: Date;
+  availabilityRules: Array<{
+    dayOfWeek: number;
+    startTimeLocal: string;
+    endTimeLocal: string;
+    isActive: boolean;
+  }>;
+  timeOffBlocks: Array<{
+    startTime: Date;
+    endTime: Date;
+  }>;
+  appointments: Array<{
+    startTime: Date;
+    endTime: Date;
+    status?: AppointmentStatus;
+  }>;
+  now?: Date;
+  timeZone?: string;
+};
+
 export type ExistingClientRecord = {
   id: string;
   name: string;
@@ -38,10 +67,7 @@ export type BookingClientInput = CreateAppointmentInput["client"];
 
 const MAX_TRANSACTION_RETRIES = 2;
 
-export type AppointmentLifecycleStatus =
-  | AppointmentStatus.CANCELLED
-  | AppointmentStatus.COMPLETED
-  | AppointmentStatus.NO_SHOW;
+export type AppointmentLifecycleStatus = Extract<AppointmentStatus, "CANCELLED" | "COMPLETED" | "NO_SHOW">;
 
 export function canTransitionAppointmentStatus(
   currentStatus: AppointmentStatus,
@@ -53,6 +79,44 @@ export function canTransitionAppointmentStatus(
       nextStatus === AppointmentStatus.COMPLETED ||
       nextStatus === AppointmentStatus.NO_SHOW)
   );
+}
+
+export function getBookingValidationError(input: BookingValidationInput): string | null {
+  const now = input.now ?? new Date();
+  const timeZone = input.timeZone ?? "UTC";
+
+  if (input.proposedStartTime <= now) {
+    return BOOKING_VALIDATION_ERRORS.past;
+  }
+
+  const availableWindows = getBarberAvailabilityForDate({
+    date: input.proposedStartTime,
+    timeZone,
+    availabilityRules: input.availabilityRules,
+    timeOffBlocks: [],
+  });
+
+  const isInsideAvailability = availableWindows.some(
+    (window) => input.proposedStartTime >= window.startTime && input.proposedEndTime <= window.endTime,
+  );
+
+  if (!isInsideAvailability) {
+    return BOOKING_VALIDATION_ERRORS.outsideAvailability;
+  }
+
+  const overlapsTimeOff = input.timeOffBlocks.some((block) =>
+    overlaps(input.proposedStartTime, input.proposedEndTime, block.startTime, block.endTime),
+  );
+
+  if (overlapsTimeOff) {
+    return BOOKING_VALIDATION_ERRORS.timeOffConflict;
+  }
+
+  if (!isTimeSlotAvailable(input.proposedStartTime, input.proposedEndTime, input.appointments)) {
+    return BOOKING_VALIDATION_ERRORS.overlap;
+  }
+
+  return null;
 }
 
 function requiresPastAppointmentForStatus(status: AppointmentLifecycleStatus): boolean {
@@ -317,19 +381,37 @@ export async function createAppointment(input: CreateAppointmentInput) {
           const startTime = input.startTime;
           const endTime = addMinutes(startTime, service.durationMinutes);
 
-          const overlappingTimeOffBlock = await tx.timeOffBlock.findFirst({
+          if (startTime <= new Date()) {
+            throw new ConflictError(BOOKING_VALIDATION_ERRORS.past);
+          }
+
+          const localDate = getDateStringInTimeZone(startTime, barber.timezone);
+          const dayStart = startOfTimeZoneDay(localDate, barber.timezone);
+          const dayEnd = endOfTimeZoneDay(localDate, barber.timezone);
+
+          const timeOffBlocks = await tx.timeOffBlock.findMany({
             where: {
               barberId: input.barberId,
-              startTime: { lt: endTime },
-              endTime: { gt: startTime },
+              startTime: { lt: dayEnd },
+              endTime: { gt: dayStart },
             },
             select: {
-              id: true,
+              startTime: true,
+              endTime: true,
             },
           });
 
-          if (overlappingTimeOffBlock) {
-            throw new ConflictError("This time slot is no longer available.");
+          const preAppointmentValidationError = getBookingValidationError({
+            proposedStartTime: startTime,
+            proposedEndTime: endTime,
+            availabilityRules: barber.availability,
+            timeOffBlocks,
+            appointments: [],
+            timeZone: barber.timezone,
+          });
+
+          if (preAppointmentValidationError) {
+            throw new ConflictError(preAppointmentValidationError);
           }
 
           const existingAppointments = await tx.appointment.findMany({
@@ -352,6 +434,7 @@ export async function createAppointment(input: CreateAppointmentInput) {
             availabilityRules: barber.availability,
             timeOffBlocks,
             appointments: existingAppointments,
+            timeZone: barber.timezone,
           });
 
           if (validationError) {

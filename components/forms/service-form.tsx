@@ -134,13 +134,15 @@ export function ServiceForm({ mode, initialService }: ServiceFormProps) {
       </div>
 
       <label className="space-y-1 text-sm text-zinc-700">
-        <span>Description</span>
+        <span>What’s included / value notes</span>
         <textarea
           className="min-h-24 w-full rounded-lg border border-zinc-300 px-3 py-2"
           maxLength={500}
+          placeholder="Example: Includes consultation, fade, razor line-up, hot towel finish. Enhancements optional."
           value={form.description}
           onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))}
         />
+        <p className="text-xs text-zinc-500">Use this to explain what clients get for the price.</p>
       </label>
 
       <div className="grid gap-4 sm:grid-cols-2">

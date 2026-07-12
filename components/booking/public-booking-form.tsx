@@ -259,7 +259,10 @@ export function PublicBookingForm({ slug }: Props) {
                     </div>
                     <p className={`mt-1 ${isSelected ? "text-zinc-100" : "text-zinc-600"}`}>{service.durationMinutes} min</p>
                     {service.description ? (
-                      <p className={`mt-1 text-xs ${isSelected ? "text-zinc-100" : "text-zinc-500"}`}>{service.description}</p>
+                      <div className={`mt-2 rounded-lg px-2 py-1.5 text-xs ${isSelected ? "bg-white/10 text-zinc-100" : "bg-zinc-50 text-zinc-600"}`}>
+                        <span className="font-medium">Includes: </span>
+                        {service.description}
+                      </div>
                     ) : null}
                   </label>
                 );
@@ -354,6 +357,10 @@ export function PublicBookingForm({ slug }: Props) {
                   : "Not selected"}
               </p>
             </div>
+
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Please arrive on time. Contact the barber directly if you need to cancel or reschedule.
+            </p>
 
             <button
               className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"

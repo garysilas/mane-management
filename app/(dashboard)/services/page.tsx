@@ -10,13 +10,16 @@ export default async function ServicesPage() {
   const barber = await getOrCreateCurrentBarber();
   const services = await prisma.service.findMany({
     where: { barberId: barber.id },
-    orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ isActive: "desc" }, { isFeatured: "desc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       name: true,
       description: true,
       durationMinutes: true,
       priceCents: true,
+      sortOrder: true,
+      isFeatured: true,
+      category: true,
       isActive: true,
     },
   });
@@ -55,6 +58,14 @@ export default async function ServicesPage() {
                     >
                       {service.isActive ? "Active" : "Inactive"}
                     </span>
+                    {service.isFeatured ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Featured</span>
+                    ) : null}
+                    {service.category ? (
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">
+                        {service.category}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-sm text-zinc-600">
                     {service.durationMinutes} min • ${(service.priceCents / 100).toFixed(2)}

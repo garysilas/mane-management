@@ -4,6 +4,9 @@ export type PublicService = {
   description: string | null;
   durationMinutes: number;
   priceCents: number;
+  sortOrder: number;
+  isFeatured: boolean;
+  category: string | null;
 };
 
 export type PublicBarberProfile = {
@@ -12,6 +15,7 @@ export type PublicBarberProfile = {
   businessName: string | null;
   location: string | null;
   timezone: string;
+  bookingPolicy: string | null;
 };
 
 export type PublicBookingBootstrap = {

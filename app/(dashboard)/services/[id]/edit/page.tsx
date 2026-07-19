@@ -29,6 +29,9 @@ export default async function EditServicePage({ params }: PageProps) {
       description: true,
       durationMinutes: true,
       priceCents: true,
+      sortOrder: true,
+      isFeatured: true,
+      category: true,
       isActive: true,
     },
   });

@@ -31,6 +31,7 @@ describe("barber settings route", () => {
       businessName: "Jay Fades",
       location: null,
       timezone: "America/Los_Angeles",
+      bookingPolicy: "Please cancel at least 24 hours ahead.",
       slug: "jayfades",
       email: "jay@example.com",
     });
@@ -43,6 +44,7 @@ describe("barber settings route", () => {
           businessName: "  Jay Fades  ",
           location: "   ",
           timezone: "America/Los_Angeles",
+          bookingPolicy: "  Please cancel at least 24 hours ahead.  ",
         }),
       }),
     );
@@ -54,11 +56,13 @@ describe("barber settings route", () => {
         businessName: "Jay Fades",
         location: null,
         timezone: "America/Los_Angeles",
+        bookingPolicy: "Please cancel at least 24 hours ahead.",
       },
       select: {
         businessName: true,
         location: true,
         timezone: true,
+        bookingPolicy: true,
         slug: true,
         email: true,
       },
@@ -67,6 +71,7 @@ describe("barber settings route", () => {
       businessName: "Jay Fades",
       location: null,
       timezone: "America/Los_Angeles",
+      bookingPolicy: "Please cancel at least 24 hours ahead.",
       slug: "jayfades",
       email: "jay@example.com",
     });
@@ -81,6 +86,7 @@ describe("barber settings route", () => {
           businessName: "Jay Fades",
           location: "Brooklyn",
           timezone: "Mars/Phobos",
+          bookingPolicy: "Please arrive on time.",
         }),
       }),
     );
@@ -101,6 +107,7 @@ describe("barber settings route", () => {
           businessName: "Jay Fades",
           location: "Brooklyn",
           timezone: "America/New_York",
+          bookingPolicy: "Please arrive on time.",
         }),
       }),
     );

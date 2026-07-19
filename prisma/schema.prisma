@@ -60,6 +60,7 @@ model Barber {
   phone            String?
   location         String?
   timezone         String             @default("America/New_York")
+  bookingPolicy    String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   services         Service[]
@@ -67,23 +68,46 @@ model Barber {
   appointments     Appointment[]
   availability     AvailabilityRule[]
   timeOffBlocks    TimeOffBlock[]
+  waitlistRequests WaitlistRequest[]
   payments         Payment[]
 }
 
 model Service {
-  id              String        @id @default(cuid())
-  barberId        String
-  name            String
-  description     String?
-  durationMinutes Int
-  priceCents      Int
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  barber          Barber        @relation(fields: [barberId], references: [id], onDelete: Cascade)
-  appointments    Appointment[]
+  id               String            @id @default(cuid())
+  barberId         String
+  name             String
+  description      String?
+  durationMinutes  Int
+  priceCents       Int
+  sortOrder        Int               @default(0)
+  isFeatured       Boolean           @default(false)
+  category         String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  barber           Barber            @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  appointments     Appointment[]
+  waitlistRequests WaitlistRequest[]
 
-  @@index([barberId, isActive])
+  @@index([barberId, isActive, sortOrder])
+}
+
+model WaitlistRequest {
+  id              String   @id @default(cuid())
+  barberId        String
+  serviceId       String?
+  clientName      String
+  email           String?
+  phone           String?
+  preferredDate   DateTime
+  preferredWindow String?
+  status          String   @default("OPEN")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  barber          Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  service         Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([barberId, status, preferredDate])
 }
 
 model Client {

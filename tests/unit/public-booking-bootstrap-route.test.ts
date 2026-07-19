@@ -26,6 +26,7 @@ describe("public booking bootstrap route", () => {
       businessName: "Jay Fades",
       location: "Brooklyn",
       timezone: "America/New_York",
+      bookingPolicy: "Please arrive on time.",
       services: [
         {
           id: "cm1234567890123456789012",
@@ -33,6 +34,9 @@ describe("public booking bootstrap route", () => {
           description: "Classic cut",
           durationMinutes: 30,
           priceCents: 3500,
+          sortOrder: 0,
+          isFeatured: true,
+          category: "Essential",
         },
       ],
     });
@@ -50,17 +54,21 @@ describe("public booking bootstrap route", () => {
         businessName: true,
         location: true,
         timezone: true,
+        bookingPolicy: true,
         services: {
           where: {
             isActive: true,
           },
-          orderBy: { createdAt: "asc" },
+          orderBy: [{ isFeatured: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
           select: {
             id: true,
             name: true,
             description: true,
             durationMinutes: true,
             priceCents: true,
+            sortOrder: true,
+            isFeatured: true,
+            category: true,
           },
         },
       },
@@ -72,6 +80,7 @@ describe("public booking bootstrap route", () => {
         businessName: "Jay Fades",
         location: "Brooklyn",
         timezone: "America/New_York",
+        bookingPolicy: "Please arrive on time.",
       },
       services: [
         {
@@ -80,6 +89,9 @@ describe("public booking bootstrap route", () => {
           description: "Classic cut",
           durationMinutes: 30,
           priceCents: 3500,
+          sortOrder: 0,
+          isFeatured: true,
+          category: "Essential",
         },
       ],
     });

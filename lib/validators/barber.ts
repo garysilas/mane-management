@@ -22,6 +22,7 @@ export const barberSettingsSchema = z.object({
     .min(1, "Timezone is required.")
     .max(120)
     .refine(isValidTimeZone, "Invalid timezone."),
+  bookingPolicy: nullableTrimmedText(1000),
 });
 
 export type BarberSettingsInput = z.infer<typeof barberSettingsSchema>;

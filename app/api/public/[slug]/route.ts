@@ -17,17 +17,21 @@ export async function GET(_request: Request, { params }: RouteProps) {
       businessName: true,
       location: true,
       timezone: true,
+      bookingPolicy: true,
       services: {
         where: {
           isActive: true,
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ isFeatured: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
           name: true,
           description: true,
           durationMinutes: true,
           priceCents: true,
+          sortOrder: true,
+          isFeatured: true,
+          category: true,
         },
       },
     },
@@ -44,6 +48,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
       businessName: barber.businessName,
       location: barber.location,
       timezone: barber.timezone,
+      bookingPolicy: barber.bookingPolicy,
     },
     services: barber.services,
   });

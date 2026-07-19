@@ -8,6 +8,7 @@ type BarberSettingsFormProps = {
     businessName: string | null;
     location: string | null;
     timezone: string;
+    bookingPolicy: string | null;
   };
 };
 
@@ -15,6 +16,7 @@ type BarberSettingsState = {
   businessName: string;
   location: string;
   timezone: string;
+  bookingPolicy: string;
 };
 
 function buildInitialState(initialSettings: BarberSettingsFormProps["initialSettings"]): BarberSettingsState {
@@ -22,6 +24,7 @@ function buildInitialState(initialSettings: BarberSettingsFormProps["initialSett
     businessName: initialSettings.businessName ?? "",
     location: initialSettings.location ?? "",
     timezone: initialSettings.timezone,
+    bookingPolicy: initialSettings.bookingPolicy ?? "",
   };
 }
 
@@ -46,6 +49,7 @@ export function BarberSettingsForm({ initialSettings }: BarberSettingsFormProps)
           businessName: form.businessName,
           location: form.location,
           timezone: form.timezone,
+          bookingPolicy: form.bookingPolicy,
         }),
       });
 
@@ -55,6 +59,7 @@ export function BarberSettingsForm({ initialSettings }: BarberSettingsFormProps)
             businessName?: string | null;
             location?: string | null;
             timezone?: string;
+            bookingPolicy?: string | null;
           }
         | null;
 
@@ -68,6 +73,7 @@ export function BarberSettingsForm({ initialSettings }: BarberSettingsFormProps)
         businessName: data?.businessName ?? "",
         location: data?.location ?? "",
         timezone: data?.timezone ?? form.timezone,
+        bookingPolicy: data?.bookingPolicy ?? "",
       });
       setSuccessMessage("Settings saved.");
       setSubmitting(false);
@@ -114,6 +120,18 @@ export function BarberSettingsForm({ initialSettings }: BarberSettingsFormProps)
           onChange={(event) => setForm((previous) => ({ ...previous, timezone: event.target.value }))}
         />
         <p className="text-xs text-zinc-500">Use an IANA timezone like America/New_York.</p>
+      </label>
+
+      <label className="space-y-1 text-sm text-zinc-700">
+        <span>Booking policy</span>
+        <textarea
+          className="min-h-24 w-full rounded-lg border border-zinc-300 px-3 py-2"
+          maxLength={1000}
+          placeholder="Example: Please arrive on time. Contact me at least 24 hours ahead to cancel or reschedule."
+          value={form.bookingPolicy}
+          onChange={(event) => setForm((previous) => ({ ...previous, bookingPolicy: event.target.value }))}
+        />
+        <p className="text-xs text-zinc-500">Shown to clients before they confirm a public booking.</p>
       </label>
 
       {errorMessage ? <p className="text-sm text-red-700">{errorMessage}</p> : null}

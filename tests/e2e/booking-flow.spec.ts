@@ -28,16 +28,23 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
     });
   });
 
+  let slotRequestCount = 0;
   await page.route("**/api/public/jayfades/slots**", async (route) => {
+    slotRequestCount += 1;
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          startTime: "2099-01-10T15:00:00.000Z",
-          endTime: "2099-01-10T15:30:00.000Z",
-        },
-      ]),
+      body: JSON.stringify(
+        slotRequestCount === 1
+          ? [
+              {
+                startTime: "2099-01-10T15:00:00.000Z",
+                endTime: "2099-01-10T15:30:00.000Z",
+              },
+            ]
+          : [],
+      ),
     });
   });
 
@@ -65,4 +72,6 @@ test("public booking flow completes with mocked APIs", async ({ page }) => {
   await page.getByRole("button", { name: "5. Confirm booking" }).click();
 
   await expect(page.getByText("Booking confirmed.")).toBeVisible();
+  await expect(page.getByText("No available times for this date.")).toBeVisible();
+  await expect(page.locator('option[value="2099-01-10T15:00:00.000Z"]')).toHaveCount(0);
 });

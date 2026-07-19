@@ -33,6 +33,9 @@ export async function PUT(request: Request, { params }: RouteProps) {
         description: true,
         durationMinutes: true,
         priceCents: true,
+        sortOrder: true,
+        isFeatured: true,
+        category: true,
         isActive: true,
       },
     });
@@ -48,6 +51,11 @@ export async function PUT(request: Request, { params }: RouteProps) {
         : existing.description,
       durationMinutes: parsed.data.durationMinutes ?? existing.durationMinutes,
       priceCents: parsed.data.priceCents ?? existing.priceCents,
+      sortOrder: parsed.data.sortOrder ?? existing.sortOrder,
+      isFeatured: parsed.data.isFeatured ?? existing.isFeatured,
+      category: Object.prototype.hasOwnProperty.call(parsed.data, "category")
+        ? (parsed.data.category ?? null)
+        : existing.category,
       isActive: parsed.data.isActive ?? existing.isActive,
     };
 

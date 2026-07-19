@@ -38,6 +38,35 @@ function isUniqueConstraintErrorForField(error: unknown, field: string): boolean
   return target === field;
 }
 
+async function ensureDefaultAvailabilityRules(tx: Prisma.TransactionClient, barberId: string) {
+  const availabilityCount = await tx.availabilityRule.count({ where: { barberId } });
+  if (availabilityCount === 0) {
+    await tx.availabilityRule.createMany({
+      data: buildDefaultAvailabilityRules(barberId),
+    });
+  }
+}
+
+async function claimBarberByEmail(userId: string, email: string): Promise<Barber | null> {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.barber.findUnique({ where: { email } });
+    if (!existing) {
+      return null;
+    }
+
+    const barber =
+      existing.clerkUserId === userId
+        ? existing
+        : await tx.barber.update({
+            where: { id: existing.id },
+            data: { clerkUserId: userId },
+          });
+
+    await ensureDefaultAvailabilityRules(tx, barber.id);
+    return barber;
+  });
+}
+
 async function buildUniqueSlug(base: string): Promise<string> {
   const baseCandidate = base || "barber";
   let candidate = baseCandidate;
@@ -80,6 +109,11 @@ export async function getOrCreateCurrentBarber(): Promise<Barber> {
   const name = rawName || user.username || "Barber";
   const baseSlug = slugify(user.username || rawName || userId.slice(0, 8)) || "barber";
 
+  const existingByEmail = await claimBarberByEmail(userId, email);
+  if (existingByEmail) {
+    return existingByEmail;
+  }
+
   for (let attempt = 0; attempt < MAX_BARBER_BOOTSTRAP_RETRIES; attempt += 1) {
     const slug = await buildUniqueSlug(baseSlug);
 
@@ -109,6 +143,13 @@ export async function getOrCreateCurrentBarber(): Promise<Barber> {
         const createdBarber = await prisma.barber.findUnique({ where: { clerkUserId: userId } });
         if (createdBarber) {
           return createdBarber;
+        }
+      }
+
+      if (isUniqueConstraintErrorForField(error, "email")) {
+        const claimedBarber = await claimBarberByEmail(userId, email);
+        if (claimedBarber) {
+          return claimedBarber;
         }
       }
 

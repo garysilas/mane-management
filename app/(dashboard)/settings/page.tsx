@@ -16,6 +16,7 @@ export default async function SettingsPage() {
           businessName: barber.businessName,
           location: barber.location,
           timezone: barber.timezone,
+          bookingPolicy: barber.bookingPolicy,
         }}
       />
       <div className="space-y-1">

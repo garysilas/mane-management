@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         ...parsed.data,
         barberId: barber.id,
         description: parsed.data.description ?? null,
+        category: parsed.data.category ?? null,
       },
     });
 

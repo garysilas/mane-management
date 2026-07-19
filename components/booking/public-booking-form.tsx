@@ -33,6 +33,8 @@ export function PublicBookingForm({ slug }: Props) {
   const [successMessage, setSuccessMessage] = useState<string>("");
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [booking, setBooking] = useState<boolean>(false);
+  const [waitlistPreferredWindow, setWaitlistPreferredWindow] = useState<string>("");
+  const [joiningWaitlist, setJoiningWaitlist] = useState<boolean>(false);
   const latestSlotsRequestRef = useRef(0);
 
   const minDate = useMemo(() => getCurrentDateInTimeZone(barber?.timezone ?? "UTC"), [barber?.timezone]);
@@ -54,6 +56,7 @@ export function PublicBookingForm({ slug }: Props) {
       setDate("");
       setSlots([]);
       setSlotValue("");
+      setWaitlistPreferredWindow("");
       latestSlotsRequestRef.current += 1;
       setErrorMessage("");
       setSuccessMessage("");
@@ -89,7 +92,11 @@ export function PublicBookingForm({ slug }: Props) {
       setErrorMessage("");
 
       try {
-        const params = new URLSearchParams({ serviceId: selectedServiceId, date: selectedDate });
+        const params = new URLSearchParams({
+          serviceId: selectedServiceId,
+          date: selectedDate,
+          requestId: String(requestId),
+        });
         const response = await fetch(`/api/public/${slug}/slots?${params.toString()}`, { cache: "no-store" });
         if (requestId !== latestSlotsRequestRef.current) {
           return;
@@ -131,6 +138,7 @@ export function PublicBookingForm({ slug }: Props) {
     setServiceId(nextServiceId);
     setSlots([]);
     setSlotValue("");
+    setWaitlistPreferredWindow("");
 
     if (date) {
       void fetchSlots(nextServiceId, date);
@@ -144,6 +152,7 @@ export function PublicBookingForm({ slug }: Props) {
     setDate(nextDate);
     setSlots([]);
     setSlotValue("");
+    setWaitlistPreferredWindow("");
 
     if (serviceId && nextDate) {
       void fetchSlots(serviceId, nextDate);
@@ -186,6 +195,7 @@ export function PublicBookingForm({ slug }: Props) {
       }
 
       setSuccessMessage("Booking confirmed.");
+      setSlots([]);
       setSlotValue("");
       setName("");
       setEmail("");
@@ -196,6 +206,46 @@ export function PublicBookingForm({ slug }: Props) {
     } catch {
       setErrorMessage("Booking failed.");
       setBooking(false);
+    }
+  }
+
+  async function onJoinWaitlist() {
+    if (!serviceId || !date || !name || (!email && !phone)) {
+      setErrorMessage("Choose a service/date and enter your name plus email or phone to join the waitlist.");
+      return;
+    }
+
+    setJoiningWaitlist(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch(`/api/public/${slug}/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId,
+          clientName: name,
+          email: email || null,
+          phone: phone || null,
+          preferredDate: `${date}T12:00:00.000Z`,
+          preferredWindow: waitlistPreferredWindow || null,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        setErrorMessage(data.error ?? "Unable to join waitlist.");
+        setJoiningWaitlist(false);
+        return;
+      }
+
+      setSuccessMessage("Waitlist request received. The barber can reach out if a spot opens.");
+      setWaitlistPreferredWindow("");
+      setJoiningWaitlist(false);
+    } catch {
+      setErrorMessage("Unable to join waitlist.");
+      setJoiningWaitlist(false);
     }
   }
 
@@ -254,7 +304,19 @@ export function PublicBookingForm({ slug }: Props) {
                       onChange={(event) => onServiceChange(event.target.value)}
                     />
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium">{service.name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{service.name}</p>
+                        {service.isFeatured ? (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isSelected ? "bg-white/15 text-white" : "bg-amber-100 text-amber-800"}`}>
+                            Featured
+                          </span>
+                        ) : null}
+                        {service.category ? (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] ${isSelected ? "bg-white/10 text-zinc-100" : "bg-zinc-100 text-zinc-600"}`}>
+                            {service.category}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className={isSelected ? "text-zinc-100" : "text-zinc-600"}>{formatCurrency(service.priceCents)}</p>
                     </div>
                     <p className={`mt-1 ${isSelected ? "text-zinc-100" : "text-zinc-600"}`}>{service.durationMinutes} min</p>
@@ -287,7 +349,32 @@ export function PublicBookingForm({ slug }: Props) {
           <BookingStepCard step={3} title="Display available time slots" description="Slots are generated by the scheduling engine.">
             {loadingSlots ? <p className="text-sm text-zinc-600">Checking availability...</p> : null}
             {!loadingSlots && date && slots.length === 0 ? (
-              <p className="text-sm text-zinc-600">No available times for this date.</p>
+              <div className="space-y-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-3">
+                <p className="text-sm text-zinc-600">No available times for this date.</p>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium text-zinc-800">Preferred time window</span>
+                    <input
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+                      maxLength={80}
+                      placeholder="Morning, afternoon, after 5pm..."
+                      value={waitlistPreferredWindow}
+                      onChange={(event) => setWaitlistPreferredWindow(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="self-end rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800 transition hover:bg-white disabled:opacity-60"
+                    disabled={joiningWaitlist || !name || (!email && !phone)}
+                    type="button"
+                    onClick={onJoinWaitlist}
+                  >
+                    {joiningWaitlist ? "Joining..." : "Join waitlist"}
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Enter your details below, then join the waitlist so the barber can follow up if this date opens.
+                </p>
+              </div>
             ) : null}
             <label className="space-y-1 text-sm">
               <span className="font-medium text-zinc-800">3. Available time slots</span>
@@ -358,9 +445,12 @@ export function PublicBookingForm({ slug }: Props) {
               </p>
             </div>
 
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Please arrive on time. Contact the barber directly if you need to cancel or reschedule.
-            </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="font-medium text-amber-900">Booking policy</p>
+              <p className="mt-1 whitespace-pre-wrap">
+                {barber.bookingPolicy || "Please arrive on time. Contact the barber directly if you need to cancel or reschedule."}
+              </p>
+            </div>
 
             <button
               className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"

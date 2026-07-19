@@ -24,11 +24,13 @@ export async function PATCH(request: Request) {
         businessName: parsed.data.businessName,
         location: parsed.data.location,
         timezone: parsed.data.timezone,
+        bookingPolicy: parsed.data.bookingPolicy,
       },
       select: {
         businessName: true,
         location: true,
         timezone: true,
+        bookingPolicy: true,
         slug: true,
         email: true,
       },

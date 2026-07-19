@@ -10,6 +10,9 @@ type EditableService = {
   description: string | null;
   durationMinutes: number;
   priceCents: number;
+  sortOrder: number;
+  isFeatured: boolean;
+  category: string | null;
   isActive: boolean;
 };
 
@@ -18,6 +21,9 @@ type ServiceFormState = {
   description: string;
   durationMinutes: string;
   priceDollars: string;
+  sortOrder: string;
+  isFeatured: boolean;
+  category: string;
   isActive: boolean;
 };
 
@@ -33,6 +39,9 @@ function buildInitialState(initialService?: EditableService): ServiceFormState {
       description: "",
       durationMinutes: "30",
       priceDollars: "35.00",
+      sortOrder: "0",
+      isFeatured: false,
+      category: "",
       isActive: true,
     };
   }
@@ -42,6 +51,9 @@ function buildInitialState(initialService?: EditableService): ServiceFormState {
     description: initialService.description ?? "",
     durationMinutes: String(initialService.durationMinutes),
     priceDollars: (initialService.priceCents / 100).toFixed(2),
+    sortOrder: String(initialService.sortOrder),
+    isFeatured: initialService.isFeatured,
+    category: initialService.category ?? "",
     isActive: initialService.isActive,
   };
 }
@@ -68,6 +80,7 @@ export function ServiceForm({ mode, initialService }: ServiceFormProps) {
 
     const durationMinutes = Number(form.durationMinutes);
     const priceDollars = Number(form.priceDollars);
+    const sortOrder = Number(form.sortOrder);
 
     if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 240) {
       setMessage("Duration must be between 5 and 240 minutes.");
@@ -81,6 +94,12 @@ export function ServiceForm({ mode, initialService }: ServiceFormProps) {
       return;
     }
 
+    if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10000) {
+      setMessage("Sort order must be a whole number between 0 and 10000.");
+      setSubmitting(false);
+      return;
+    }
+
     const response = await fetch(endpoint, {
       method: isEdit ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -89,6 +108,9 @@ export function ServiceForm({ mode, initialService }: ServiceFormProps) {
         description: form.description.trim() || null,
         durationMinutes,
         priceCents: Math.round(priceDollars * 100),
+        sortOrder,
+        isFeatured: form.isFeatured,
+        category: form.category.trim() || null,
         isActive: form.isActive,
       }),
     });
@@ -157,6 +179,39 @@ export function ServiceForm({ mode, initialService }: ServiceFormProps) {
             value={form.priceDollars}
             onChange={(event) => setForm((previous) => ({ ...previous, priceDollars: event.target.value }))}
           />
+        </label>
+
+        <label className="space-y-1 text-sm text-zinc-700">
+          <span>Category / tier</span>
+          <input
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+            maxLength={80}
+            placeholder="Essential, Premium, Add-on..."
+            value={form.category}
+            onChange={(event) => setForm((previous) => ({ ...previous, category: event.target.value }))}
+          />
+        </label>
+
+        <label className="space-y-1 text-sm text-zinc-700">
+          <span>Sort order</span>
+          <input
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+            type="number"
+            min={0}
+            max={10000}
+            value={form.sortOrder}
+            onChange={(event) => setForm((previous) => ({ ...previous, sortOrder: event.target.value }))}
+          />
+          <p className="text-xs text-zinc-500">Lower numbers appear first within featured/non-featured groups.</p>
+        </label>
+
+        <label className="flex items-center gap-2 pt-7 text-sm text-zinc-700">
+          <input
+            checked={form.isFeatured}
+            type="checkbox"
+            onChange={(event) => setForm((previous) => ({ ...previous, isFeatured: event.target.checked }))}
+          />
+          Featured on booking page
         </label>
 
         <label className="flex items-center gap-2 pt-7 text-sm text-zinc-700">

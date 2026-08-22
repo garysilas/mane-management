@@ -1,77 +1,78 @@
 import { expect, test } from "@playwright/test";
 
+import {
+  cleanupBookingFixture,
+  createBookingFixture,
+  getBookedAppointment,
+  type BookingFixture,
+} from "./support/booking-fixture";
+
 test.use({ timezoneId: "America/Los_Angeles" });
 
-test("public booking flow completes with mocked APIs", async ({ page }) => {
-  await page.route("**/api/public/jayfades", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        barber: {
-          slug: "jayfades",
-          name: "Jay",
-          businessName: "Jay Fades",
-          location: "Brooklyn",
-          timezone: "America/New_York",
-        },
-        services: [
-          {
-            id: "cm1234567890123456789012",
-            name: "Haircut",
-            description: "Classic cut",
-            durationMinutes: 30,
-            priceCents: 3500,
-          },
-        ],
-      }),
-    });
-  });
+let fixture: BookingFixture | undefined;
 
-  let slotRequestCount = 0;
-  await page.route("**/api/public/jayfades/slots**", async (route) => {
-    slotRequestCount += 1;
+test.beforeAll(async () => {
+  fixture = await createBookingFixture();
+});
 
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        slotRequestCount === 1
-          ? [
-              {
-                startTime: "2099-01-10T15:00:00.000Z",
-                endTime: "2099-01-10T15:30:00.000Z",
-              },
-            ]
-          : [],
-      ),
-    });
-  });
+test.afterAll(async () => {
+  if (fixture) {
+    await cleanupBookingFixture(fixture);
+  }
+});
 
-  await page.route("**/api/public/jayfades/book", async (route) => {
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: JSON.stringify({ id: "cm-appointment" }),
-    });
-  });
+test("public booking flow creates a real appointment", async ({ page }) => {
+  const bookingFixture = fixture;
+  if (!bookingFixture) {
+    throw new Error("The database booking fixture was not created.");
+  }
 
-  await page.goto("/jayfades");
+  await page.goto(`/${bookingFixture.slug}`);
+  await expect(page.getByText("Playwright Fades")).toBeVisible();
 
-  await page.getByLabel("2. Date").fill("2099-01-10");
+  await page.getByLabel("2. Date").fill(bookingFixture.bookingDate);
 
-  await expect(page.getByText("Times shown in America/New_York.")).toBeVisible();
-  await expect(page.locator('option[value="2099-01-10T15:00:00.000Z"]')).toHaveText("10:00 AM");
+  await expect(page.getByText("Times shown in UTC.")).toBeVisible();
+  await expect(page.locator(`option[value="${bookingFixture.slotStartTime}"]`)).toHaveText("3:00 PM");
 
-  await page.getByLabel("3. Available time slots").selectOption("2099-01-10T15:00:00.000Z");
-  await expect(page.getByText("Time: Sat, Jan 10, 10:00 AM (America/New_York)")).toBeVisible();
-  await page.getByLabel("Name").fill("Alex Client");
-  await page.getByLabel("Email").fill("alex@example.com");
-  await page.getByLabel("Phone").fill("+15555550100");
+  await page.getByLabel("3. Available time slots").selectOption(bookingFixture.slotStartTime);
+  await page.getByLabel("Name").fill(bookingFixture.clientName);
+  await page.getByLabel("Email").fill(bookingFixture.clientEmail);
+  await page.getByLabel("Phone").fill(bookingFixture.clientPhone);
+
+  const bookingResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/api/public/${bookingFixture.slug}/book`) &&
+      response.request().method() === "POST",
+  );
 
   await page.getByRole("button", { name: "5. Confirm booking" }).click();
 
+  const bookingResponse = await bookingResponsePromise;
+  expect(bookingResponse.status()).toBe(201);
   await expect(page.getByText("Booking confirmed.")).toBeVisible();
-  await expect(page.getByText("No available times for this date.")).toBeVisible();
-  await expect(page.locator('option[value="2099-01-10T15:00:00.000Z"]')).toHaveCount(0);
+  await expect(page.locator(`option[value="${bookingFixture.slotStartTime}"]`)).toHaveCount(0);
+
+  const appointment = await getBookedAppointment(bookingFixture);
+  expect(appointment).not.toBeNull();
+  expect(appointment).toMatchObject({
+    barberId: bookingFixture.barberId,
+    serviceId: bookingFixture.serviceId,
+    status: "BOOKED",
+    bookingSource: "PUBLIC_PAGE",
+    startTime: new Date(bookingFixture.slotStartTime),
+    endTime: new Date(bookingFixture.slotEndTime),
+    client: {
+      name: bookingFixture.clientName,
+      email: bookingFixture.clientEmail,
+      phone: bookingFixture.clientPhone,
+    },
+  });
+  expect(appointment?.reminders).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ channel: "EMAIL", type: "APPOINTMENT_REMINDER", status: "PENDING" }),
+      expect.objectContaining({ channel: "SMS", type: "APPOINTMENT_REMINDER", status: "PENDING" }),
+    ]),
+  );
+  expect(appointment?.reminders).toHaveLength(2);
 });

@@ -39,10 +39,6 @@ export PATH=/home/hermes/.nvm/versions/node/v22.23.1/bin:$PATH
 - `tests/unit`: Vitest tests
 - `tests/e2e`: Playwright tests
 
-## Env Docs
-
-- [Environment variables](./docs/environment.md)
-
 ## Current MVP Coverage
 
 - Barber auth scaffolding with Clerk and lazy barber bootstrap

@@ -106,4 +106,4 @@ Results:
 - Production build: passed
 - Playwright booking-flow spec: passed after installing the Chromium browser with `npx playwright install chromium`
 
-Note: the existing Playwright booking flow is still mocked. It verifies browser/UI behavior, not a real database-backed booking transaction.
+The Playwright booking flow uses `DATABASE_URL` to seed an isolated barber and service, drives the real public booking APIs, verifies the appointment and reminder rows, and removes the seeded records afterward. Run it against a migrated development or test database.

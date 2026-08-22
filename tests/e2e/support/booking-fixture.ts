@@ -26,6 +26,10 @@ export type BookingFixture = {
 };
 
 export async function createBookingFixture(): Promise<BookingFixture> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required for the real database booking E2E test.");
+  }
+
   const id = randomUUID().replace(/-/g, "").slice(0, 12);
   const slug = `playwright-booking-${id}`;
   const barberEmail = `${slug}@example.com`;

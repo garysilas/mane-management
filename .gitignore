@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Hermes local planning/session artifacts
 /.hermes/
+
+# Local Obsidian vault
+/Obsidian Vault One/

@@ -9,7 +9,7 @@
 
 ## Build approach
 
-<TBD, set by /scope>
+Journey (finish one complete barber or booking client path before starting the next).
 
 ## Commands
 
@@ -40,7 +40,7 @@ No specs exist now. Put future specs in `docs/specs/NNNN-title.md`.
 * Keep timezone calculations in `lib/utils/time.ts`. Store dates as `Date` values and return ISO strings at API boundaries.
 * Treat email and SMS delivery as best effort. Missing provider variables make those wrappers return without sending.
 * Payments are preserved scaffolding and are not an active product surface.
-* Add or update focused Vitest coverage for business rules. Playwright currently proves the public booking UI with mocked APIs.
+* Add or update focused Vitest coverage for business rules. Playwright proves the public booking journey through real APIs and a migrated database, then verifies the persisted appointment and reminder records.
 
 ## Agent skills
 
